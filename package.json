@@ -16,13 +16,13 @@
     "hono",
     "fastify"
   ],
-  "homepage": "https://github.com/AmirAbaris/webook-kit#readme",
+  "homepage": "https://github.com/AmirAbaris/webhook-kit#readme",
   "bugs": {
-    "url": "https://github.com/AmirAbaris/webook-kit/issues"
+    "url": "https://github.com/AmirAbaris/webhook-kit/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AmirAbaris/webook-kit.git"
+    "url": "git+https://github.com/AmirAbaris/webhook-kit.git"
   },
   "license": "MIT",
   "author": "Amir Abaris",
@@ -44,21 +44,22 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown --config-loader native",
     "lint": "prettier --check . && tsc --noEmit",
     "format": "prettier --write .",
     "prepack": "pnpm build"
   },
-  "dependencies": {},
   "devDependencies": {
     "@types/node": "^26.6.6",
     "prettier": "^3.9.10",
     "tsdown": "^0.23.4",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "unrun": "^0.3.1"
   },
   "engines": {
     "node": ">=18.0.0"
   },
+  "packageManager": "pnpm@9.15.9",
   "publishConfig": {
     "access": "public"
   }
