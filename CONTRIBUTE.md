@@ -67,8 +67,8 @@ type(scope): brief description in imperative mood
 
 ```bash
 # Clone the repository
-git clone https://github.com/AmirAbaris/webook-kit.git
-cd webook-kit
+git clone https://github.com/AmirAbaris/webhook-kit.git
+cd webhook-kit
 
 # Install dependencies
 pnpm install

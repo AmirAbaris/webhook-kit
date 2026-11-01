@@ -26,6 +26,6 @@
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true
   },
-  "include": ["src/**/*", "tsdown.config.mts"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

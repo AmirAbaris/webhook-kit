@@ -16,13 +16,13 @@
     "hono",
     "fastify"
   ],
-  "homepage": "https://github.com/AmirAbaris/webook-kit#readme",
+  "homepage": "https://github.com/AmirAbaris/webhook-kit#readme",
   "bugs": {
-    "url": "https://github.com/AmirAbaris/webook-kit/issues"
+    "url": "https://github.com/AmirAbaris/webhook-kit/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AmirAbaris/webook-kit.git"
+    "url": "git+https://github.com/AmirAbaris/webhook-kit.git"
   },
   "license": "MIT",
   "author": "Amir Abaris",
