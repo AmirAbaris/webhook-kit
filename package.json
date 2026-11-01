@@ -31,6 +31,9 @@
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "webhook-kit": "./bin/webhook-kit.mjs"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -41,7 +44,11 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "bin",
+    "docs/agent-rules.md",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsdown --config-loader native",
