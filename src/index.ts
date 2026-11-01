@@ -4,4 +4,9 @@
  * using the Web Cryptography API (`crypto.subtle`).
  */
 
-export const VERSION = "0.1.0";
+export * from "./types.js";
+export * from "./errors.js";
+export * from "./verify.js";
+export * from "./utils/extract-body.js";
+export * from "./crypto/subtle.js";
+export * from "./providers/index.js";
