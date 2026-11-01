@@ -1,3 +1,16 @@
+// Polyfill Promise.withResolvers for Node < 22 environments during build
+if (typeof Promise.withResolvers !== "function") {
+  Promise.withResolvers = function () {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+}
+
 import { defineConfig } from "tsdown";
 import fs from "node:fs";
 
