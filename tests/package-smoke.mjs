@@ -23,9 +23,13 @@ console.log("🧪 Starting webhook-kit package smoke test...");
 console.log(`📁 Sandbox: ${tempDir}`);
 
 try {
-  // 1. Build the library
-  console.log("📦 Step 1: Building distribution artifacts...");
-  execSync("pnpm build", { cwd: rootDir, stdio: "inherit" });
+  // 1. Build the library if dist does not already exist (e.g. from CI build artifact)
+  if (!fs.existsSync(path.join(rootDir, "dist/index.mjs"))) {
+    console.log("📦 Step 1: Building distribution artifacts...");
+    execSync("pnpm build", { cwd: rootDir, stdio: "inherit" });
+  } else {
+    console.log("📦 Step 1: Using pre-built distribution artifacts...");
+  }
 
   // 2. Pack tarball into the sandbox directory
   console.log("📦 Step 2: Packing npm tarball...");
