@@ -58,7 +58,7 @@
     "test:smoke": "node ./tests/package-smoke.mjs",
     "lint": "prettier --check . && tsc --noEmit",
     "format": "prettier --write .",
-    "prepack": "pnpm build"
+    "prepack": "node -e \"import('node:fs').then(fs => { if (!fs.existsSync('dist/index.mjs')) import('node:child_process').then(cp => cp.execSync('pnpm build', { stdio: 'inherit' })) })\""
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
