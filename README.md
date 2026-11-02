@@ -87,33 +87,349 @@ yarn add webhook-kit
 
 ## Quick Start
 
-### Generic Webhook Verification
+### Unified Verification (Stripe, GitHub, Shopify, Generic)
+
+`webhook-kit` provides a single unified entry point `verifyWebhookSignature` (and `assertWebhookSignature`) that works seamlessly across providers and runtimes:
 
 ```ts
 import { verifyWebhookSignature, assertWebhookSignature } from "webhook-kit";
 
-// 1. Boolean check with detailed result object
+// 1. Result-based verification (discriminated union)
 const result = await verifyWebhookSignature({
-  body: rawPayloadOrRequest,
-  signature: headerSignature,
-  secret: process.env.SIGNING_SECRET!,
-  algorithm: "SHA-256",
-  toleranceSeconds: 300, // Replay attack protection
+  body: req, // Pass Web Standard Request, Stream, Buffer, or string directly
+  secret: process.env.STRIPE_WEBHOOK_SECRET!,
+  provider: "stripe", // Built-in: 'stripe' | 'github' | 'shopify' (or generic HMAC)
+  toleranceSeconds: 300, // Built-in replay attack protection
 });
 
 if (!result.valid) {
-  console.error("Verification failed:", result.error?.message);
+  // result.error is strongly typed WebhookKitError
+  console.error("Verification failed:", result.error.message);
 } else {
+  // result.payload is automatically typed (e.g. StripeWebhookEvent)
   console.log("Verified payload:", result.payload);
 }
 
-// 2. Or assert mode (throws on failure, returns typed payload)
-const payload = await assertWebhookSignature<MyEventPayload>({
-  body: rawPayloadOrRequest,
-  signature: headerSignature,
-  secret: process.env.SIGNING_SECRET!,
+// 2. Or assert mode (returns typed payload or throws typed WebhookKitError)
+const payload = await assertWebhookSignature({
+  body: req,
+  secret: process.env.GITHUB_WEBHOOK_SECRET!,
+  provider: "github",
 });
 ```
+
+---
+
+## Framework Recipes
+
+### Next.js App Router (`app/api/webhook/route.ts`)
+
+Next.js App Router route handlers receive standard Web `Request` objects. Pass `req` directly to `webhook-kit` without calling `await req.json()` first:
+
+```ts
+// app/api/webhook/route.ts
+import { NextResponse } from "next/server";
+import { verifyWebhookSignature } from "webhook-kit";
+
+export async function POST(req: Request) {
+  // CRITICAL: Pass the Web Standard `Request` object directly to `body`.
+  // Do NOT call `await req.json()` beforehand! Parsing JSON alters raw payload bytes and breaks HMAC.
+  // webhook-kit extracts raw bytes with req.clone() and automatically reads signature headers.
+  const result = await verifyWebhookSignature({
+    body: req,
+    secret: process.env.STRIPE_WEBHOOK_SECRET!,
+    provider: "stripe", // Automatically parses and verifies Stripe-Signature (v1 + timestamp)
+  });
+
+  if (!result.valid) {
+    console.error("Stripe verification failed:", result.error.message);
+    return new NextResponse(`Webhook Error: ${result.error.message}`, {
+      status: 400,
+    });
+  }
+
+  // result.payload is typed StripeWebhookEvent
+  const event = result.payload;
+  console.log("Received Stripe event:", event.type, event.id);
+
+  switch (event.type) {
+    case "checkout.session.completed":
+      // Handle business logic safely
+      break;
+    default:
+      console.log(`Unhandled event type: ${event.type}`);
+  }
+
+  return NextResponse.json({ received: true });
+}
+```
+
+### Cloudflare Workers / Hono (`src/index.ts`)
+
+`webhook-kit` has zero runtime dependencies and uses standard `crypto.subtle`, making it run natively on Cloudflare Workers and Hono without Node.js compatibility flags or polyfills.
+
+#### Hono
+
+In Hono, `c.req.raw` exposes the underlying Web Standard `Request`:
+
+```ts
+// src/index.ts
+import { Hono } from "hono";
+import { verifyWebhookSignature } from "webhook-kit";
+
+type Bindings = {
+  GITHUB_WEBHOOK_SECRET: string;
+};
+
+const app = new Hono<{ Bindings: Bindings }>();
+
+app.post("/api/webhook", async (c) => {
+  // c.req.raw is the native Web Standard Request object
+  const result = await verifyWebhookSignature({
+    body: c.req.raw,
+    secret: c.env.GITHUB_WEBHOOK_SECRET,
+    provider: "github", // Automatically extracts and validates X-Hub-Signature-256
+  });
+
+  if (!result.valid) {
+    return c.text(`Unauthorized: ${result.error.message}`, 401);
+  }
+
+  // result.payload is strongly typed GithubWebhookEvent
+  const event = result.payload;
+  console.log("GitHub event:", event.action);
+
+  return c.json({ received: true });
+});
+
+export default app;
+```
+
+#### Cloudflare Workers (Native `fetch`)
+
+```ts
+import { verifyWebhookSignature } from "webhook-kit";
+
+interface Env {
+  STRIPE_WEBHOOK_SECRET: string;
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    if (
+      request.method !== "POST" ||
+      new URL(request.url).pathname !== "/api/webhook"
+    ) {
+      return new Response("Not Found", { status: 404 });
+    }
+
+    const result = await verifyWebhookSignature({
+      body: request,
+      secret: env.STRIPE_WEBHOOK_SECRET,
+      provider: "stripe",
+    });
+
+    if (!result.valid) {
+      return new Response(`Unauthorized: ${result.error.message}`, {
+        status: 401,
+      });
+    }
+
+    return Response.json({ received: true });
+  },
+};
+```
+
+### Express & Node.js HTTP Handler
+
+In Express and Node.js HTTP servers, the most common pitfall is global JSON body parsers that mutate request streams before your webhook handler executes.
+
+#### Express
+
+Configure your webhook endpoint with `express.raw({ type: "application/json" })` **before** any application-wide `express.json()` middleware:
+
+```ts
+// server.ts
+import express from "express";
+import { verifyWebhookSignature } from "webhook-kit";
+
+const app = express();
+
+// IMPORTANT: Webhook routes must receive raw payload bytes (Buffer)
+// Register this handler BEFORE global express.json() middleware!
+app.post(
+  "/api/webhook",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    // req.body is a raw Buffer (Uint8Array), preserving original bytes
+    const result = await verifyWebhookSignature({
+      body: req.body,
+      headers: req.headers, // webhook-kit inspects headers for signature and timestamp
+      secret: process.env.STRIPE_WEBHOOK_SECRET!,
+      provider: "stripe",
+    });
+
+    if (!result.valid) {
+      console.error("Verification failed:", result.error.message);
+      return res.status(400).send(`Webhook Error: ${result.error.message}`);
+    }
+
+    // result.payload is safely parsed and typed
+    const event = result.payload;
+    console.log("Verified event:", event.type);
+
+    return res.json({ received: true });
+  },
+);
+
+// Global JSON middleware for standard API endpoints
+app.use(express.json());
+
+app.listen(3000, () => console.log("Server listening on port 3000"));
+```
+
+#### Vanilla Node.js HTTP (`node:http`)
+
+```ts
+// server.mjs
+import http from "node:http";
+import { verifyWebhookSignature } from "webhook-kit";
+
+const server = http.createServer(async (req, res) => {
+  if (req.method === "POST" && req.url === "/api/webhook") {
+    // Buffer raw incoming stream chunks to preserve exact byte sequence
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+      chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    }
+    const rawBody = Buffer.concat(chunks);
+
+    const result = await verifyWebhookSignature({
+      body: rawBody,
+      headers: req.headers,
+      secret: process.env.WEBHOOK_SECRET!,
+      provider: "shopify", // Automatically verifies X-Shopify-Hmac-Sha256
+    });
+
+    if (!result.valid) {
+      res.writeHead(400, { "Content-Type": "text/plain" });
+      return res.end(`Verification failed: ${result.error.message}`);
+    }
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({ received: true }));
+  }
+
+  res.writeHead(404).end();
+});
+
+server.listen(3000);
+```
+
+---
+
+## Error Handling Best Practices
+
+`webhook-kit` provides two error handling styles and a strongly typed error class hierarchy:
+
+### 1. Functional Pattern (Discriminated Union)
+
+`verifyWebhookSignature` returns a discriminated union `WebhookVerificationResult<T>`. Checking `result.valid` cleanly narrows the types with full TypeScript compiler safety:
+
+```ts
+const result = await verifyWebhookSignature({
+  body: req,
+  secret: process.env.WEBHOOK_SECRET!,
+  provider: "stripe",
+});
+
+if (!result.valid) {
+  // TypeScript narrows result to WebhookVerificationFailure
+  // result.error is guaranteed to be a WebhookKitError
+  console.error("Error Code:", result.error.code);
+  console.error("Error Message:", result.error.message);
+  return new Response("Unauthorized", { status: 401 });
+}
+
+// TypeScript narrows result to WebhookVerificationSuccess<StripeWebhookEvent>
+// result.payload is guaranteed non-null and typed
+const event = result.payload;
+console.log("Processed event:", event.id);
+```
+
+### 2. Exception Pattern (`assertWebhookSignature`)
+
+If your application prefers `try / catch` blocks or centralized error middleware, use `assertWebhookSignature` (or pass `{ throwOnError: true }`). It returns the typed payload directly on success and throws a `WebhookKitError` on failure:
+
+```ts
+import {
+  assertWebhookSignature,
+  SignatureVerificationError,
+  TimestampToleranceError,
+  InvalidSignatureHeaderError,
+  PayloadExtractionError,
+} from "webhook-kit";
+
+try {
+  const event = await assertWebhookSignature({
+    body: req,
+    secret: process.env.STRIPE_WEBHOOK_SECRET!,
+    provider: "stripe",
+    toleranceSeconds: 300,
+  });
+
+  // Direct access to typed payload
+  return Response.json({ received: true });
+} catch (err) {
+  if (err instanceof TimestampToleranceError) {
+    // Webhook timestamp outside tolerance window: possible replay attack or clock drift
+    console.warn(
+      `Replay protection: event timestamp ${err.timestamp} exceeded tolerance of ${err.toleranceSeconds}s`,
+    );
+    return new Response("Webhook timestamp expired", { status: 400 });
+  }
+
+  if (err instanceof SignatureVerificationError) {
+    // Signature mismatch: tampered payload or incorrect signing secret
+    console.error("Signature verification failed:", err.message);
+    return new Response("Invalid signature", { status: 401 });
+  }
+
+  if (err instanceof InvalidSignatureHeaderError) {
+    // Missing or malformed header (e.g. missing sha256= prefix or missing stripe-signature)
+    return new Response("Malformed signature header", { status: 400 });
+  }
+
+  if (err instanceof PayloadExtractionError) {
+    // Request stream could not be read
+    return new Response("Invalid request payload", { status: 400 });
+  }
+
+  return new Response("Internal Server Error", { status: 500 });
+}
+```
+
+### Error Classes & Error Codes
+
+All errors inherit from `WebhookKitError` and include machine-readable `code` properties:
+
+| Error Class                   | `code`                          | Root Cause & Mitigation                                                                            |
+| ----------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `SignatureVerificationError`  | `SIGNATURE_VERIFICATION_FAILED` | HMAC digest mismatch or missing signing secret. Check that your webhook signing secret is correct. |
+| `TimestampToleranceError`     | `TIMESTAMP_TOLERANCE_EXCEEDED`  | Payload timestamp exceeds `toleranceSeconds` window. Protects against replay attacks.              |
+| `InvalidSignatureHeaderError` | `INVALID_SIGNATURE_HEADER`      | Header is missing, empty, or lacks required prefix (`sha256=`, `t=...,v1=...`).                    |
+| `PayloadExtractionError`      | `PAYLOAD_EXTRACTION_FAILED`     | Body is an unsupported format or input stream was prematurely closed.                              |
+| `WebhookKitError`             | `WEBHOOK_KIT_ERROR`             | Base class for all webhook-kit errors.                                                             |
+
+### Replay Attack Mitigation
+
+Replay attacks occur when an attacker intercepts a valid webhook request and replays it to your server to trigger duplicate actions (such as fulfilling an order twice).
+
+`webhook-kit` provides automatic replay protection:
+
+- **Stripe**: Parses the timestamp from `Stripe-Signature` (`t=...`) and validates against `toleranceSeconds` (default: 300s).
+- **Generic**: Automatically inspects `x-webhook-timestamp` (or explicit `timestamp` option) and validates against `toleranceSeconds`.
+- **Clock Drift**: Customize `toleranceSeconds` or pass `currentTimestamp` for deterministic unit testing.
 
 ---
 
