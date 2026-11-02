@@ -8,6 +8,12 @@ import {
   type WebhookVerificationResult,
   type WebhookVerifyOptions,
   type RawBody,
+  verifyStripeWebhook,
+  assertStripeWebhook,
+  parseStripeSignature,
+  type StripeWebhookEvent,
+  type StripeParsedSignatureHeader,
+  type StripeVerifyOptions,
 } from "../src/index.js";
 
 interface SampleStripePayload {
@@ -97,3 +103,37 @@ expectType<string>(optionsHexHmac);
 
 const isEqual = timingSafeEqual(new Uint8Array([1]), new Uint8Array([1]));
 expectType<boolean>(isEqual);
+
+// 6. Verify Stripe provider type inference and narrowing
+const stripeResult = await verifyStripeWebhook({
+  body: '{"id":"evt_stripe_123"}',
+  signature: "t=1492774577,v1=sig",
+  secret: "whsec_test",
+});
+expectType<WebhookVerificationResult<StripeWebhookEvent>>(stripeResult);
+expectType<StripeWebhookEvent | undefined>(stripeResult.payload);
+
+const customStripeResult = await verifyStripeWebhook<SampleStripePayload>({
+  body: '{"id":"evt_123","type":"charge.succeeded","data":{"object":{"amount":1000}}}',
+  signature: "t=1492774577,v1=sig",
+  secret: "whsec_test",
+});
+expectType<WebhookVerificationResult<SampleStripePayload>>(customStripeResult);
+expectType<SampleStripePayload | undefined>(customStripeResult.payload);
+
+const assertedStripe = await assertStripeWebhook<SampleStripePayload>({
+  body: '{"id":"evt_123"}',
+  signature: "t=1492774577,v1=sig",
+  secret: "whsec_test",
+});
+expectType<SampleStripePayload>(assertedStripe);
+
+const parsedSig = parseStripeSignature("t=1492774577,v1=sig");
+expectType<StripeParsedSignatureHeader>(parsedSig);
+
+expectAssignable<StripeVerifyOptions>({
+  body: "test",
+  signature: "t=1,v1=sig",
+  secret: "whsec_test",
+  toleranceSeconds: 300,
+});

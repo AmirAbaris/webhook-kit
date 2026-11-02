@@ -25,4 +25,9 @@ export interface ProviderVerifyOptions {
    * Tolerance in seconds for replay-attack prevention (where supported).
    */
   toleranceSeconds?: number;
+
+  /**
+   * Whether to automatically parse the verified body as JSON. Defaults to true.
+   */
+  parseJson?: boolean;
 }
