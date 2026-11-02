@@ -16,6 +16,13 @@ const __dirname = path.dirname(__filename);
 const START_MARKER = "<!-- webhook-kit-agent-rules:start -->";
 const END_MARKER = "<!-- webhook-kit-agent-rules:end -->";
 
+const AGENT_FILE_CANDIDATES = [
+  "AGENTS.md",
+  "CLAUDE.md",
+  ".cursorrules",
+  ".github/copilot-instructions.md",
+];
+
 const AGENT_RULES_CONTENT = `${START_MARKER}
 ### Webhook Signature Verification Rules (webhook-kit)
 - **NEVER parse JSON before verifying signatures**: In frameworks like Next.js, Hono, or Express, parsing JSON reorders keys and strips whitespace, invalidating cryptographic HMAC checks. Always pass the raw \`Request\` or raw text string.
@@ -51,59 +58,44 @@ function getPackageVersion() {
   }
 }
 
-function handleInitAgent(args) {
-  let targetFile = null;
+function resolveTargetAgentFile(args) {
   const targetIndex = args.indexOf("--target");
   if (targetIndex !== -1 && args[targetIndex + 1]) {
-    targetFile = args[targetIndex + 1];
-  } else {
-    // Autodetect existing agent instruction file in current working directory
-    const candidates = [
-      "AGENTS.md",
-      "CLAUDE.md",
-      ".cursorrules",
-      ".github/copilot-instructions.md",
-    ];
-    for (const candidate of candidates) {
-      if (fs.existsSync(path.resolve(process.cwd(), candidate))) {
-        targetFile = candidate;
-        break;
-      }
-    }
-    // Default to AGENTS.md if none found
-    if (!targetFile) {
-      targetFile = "AGENTS.md";
-    }
+    return args[targetIndex + 1];
   }
+  const existing = AGENT_FILE_CANDIDATES.find((candidate) =>
+    fs.existsSync(path.resolve(process.cwd(), candidate)),
+  );
+  return existing ?? "AGENTS.md";
+}
 
-  const resolvedPath = path.resolve(process.cwd(), targetFile);
-  let existingContent = "";
-  const fileExists = fs.existsSync(resolvedPath);
-
-  if (fileExists) {
-    existingContent = fs.readFileSync(resolvedPath, "utf8");
-  }
-
-  let updatedContent = "";
-  if (
+function buildUpdatedAgentContent(existingContent, targetFile) {
+  const hasMarkers =
     existingContent.includes(START_MARKER) &&
-    existingContent.includes(END_MARKER)
-  ) {
-    // Replace existing block
+    existingContent.includes(END_MARKER);
+
+  if (hasMarkers) {
     const regex = new RegExp(`${START_MARKER}[\\s\\S]*?${END_MARKER}`, "g");
-    updatedContent = existingContent.replace(regex, AGENT_RULES_CONTENT);
     console.log(`✓ Updated existing webhook-kit rules in ${targetFile}`);
-  } else {
-    // Append to file
-    const separator =
-      existingContent.length > 0 && !existingContent.endsWith("\n\n")
-        ? "\n\n"
-        : "";
-    updatedContent = `${existingContent}${separator}${AGENT_RULES_CONTENT}\n`;
-    console.log(`✓ Injected webhook-kit rules into ${targetFile}`);
+    return existingContent.replace(regex, AGENT_RULES_CONTENT);
   }
 
-  // Ensure parent directory exists
+  const separator =
+    existingContent.length > 0 && !existingContent.endsWith("\n\n")
+      ? "\n\n"
+      : "";
+  console.log(`✓ Injected webhook-kit rules into ${targetFile}`);
+  return `${existingContent}${separator}${AGENT_RULES_CONTENT}\n`;
+}
+
+function handleInitAgent(args) {
+  const targetFile = resolveTargetAgentFile(args);
+  const resolvedPath = path.resolve(process.cwd(), targetFile);
+  const existingContent = fs.existsSync(resolvedPath)
+    ? fs.readFileSync(resolvedPath, "utf8")
+    : "";
+
+  const updatedContent = buildUpdatedAgentContent(existingContent, targetFile);
   const parentDir = path.dirname(resolvedPath);
   if (!fs.existsSync(parentDir)) {
     fs.mkdirSync(parentDir, { recursive: true });
@@ -113,21 +105,19 @@ function handleInitAgent(args) {
   console.log(`Rules synchronized successfully at ${resolvedPath}`);
 }
 
+const HELP_FLAGS = new Set(["help", "--help", "-h"]);
+const VERSION_FLAGS = new Set(["version", "--version", "-v"]);
+
 function main() {
   const args = process.argv.slice(2);
   const command = args[0];
 
-  if (
-    !command ||
-    command === "help" ||
-    command === "--help" ||
-    command === "-h"
-  ) {
+  if (!command || HELP_FLAGS.has(command)) {
     printHelp();
     process.exit(0);
   }
 
-  if (command === "version" || command === "--version" || command === "-v") {
+  if (VERSION_FLAGS.has(command)) {
     console.log(`webhook-kit v${getPackageVersion()}`);
     process.exit(0);
   }

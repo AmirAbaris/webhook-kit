@@ -4,13 +4,22 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
   build:
     name: Lint & Build (Node 22)
     runs-on: ubuntu-latest
     steps:
+      - name: Validate PR branch naming convention
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if ! [[ "$HEAD_REF" =~ ^(feat|fix|docs|test|refactor|chore|release)/[a-z0-9-]+$ ]]; then
+            echo "::error::Branch '$HEAD_REF' violates CONTRIBUTE.md naming convention. Expected '<category>/<kebab-case-slug>' (e.g. 'feat/crypto-subtle', 'chore/lint-guardrails')."
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
