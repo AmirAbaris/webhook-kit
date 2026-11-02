@@ -14,6 +14,11 @@ import {
   type StripeWebhookEvent,
   type StripeParsedSignatureHeader,
   type StripeVerifyOptions,
+  verifyGithubWebhook,
+  assertGithubWebhook,
+  parseGithubSignature,
+  type GithubWebhookEvent,
+  type GithubVerifyOptions,
 } from "../src/index.js";
 
 interface SampleStripePayload {
@@ -136,4 +141,45 @@ expectAssignable<StripeVerifyOptions>({
   signature: "t=1,v1=sig",
   secret: "whsec_test",
   toleranceSeconds: 300,
+});
+
+// 7. Verify GitHub provider type inference and narrowing
+const githubResult = await verifyGithubWebhook({
+  body: '{"action":"opened"}',
+  signature: "sha256=sig",
+  secret: "gh_secret",
+});
+expectType<WebhookVerificationResult<GithubWebhookEvent>>(githubResult);
+expectType<GithubWebhookEvent | undefined>(githubResult.payload);
+
+interface SampleGithubPayload {
+  action: string;
+  issue: {
+    number: number;
+    title: string;
+  };
+}
+
+const customGithubResult = await verifyGithubWebhook<SampleGithubPayload>({
+  body: '{"action":"opened","issue":{"number":42,"title":"test"}}',
+  signature: "sha256=sig",
+  secret: "gh_secret",
+});
+expectType<WebhookVerificationResult<SampleGithubPayload>>(customGithubResult);
+expectType<SampleGithubPayload | undefined>(customGithubResult.payload);
+
+const assertedGithub = await assertGithubWebhook<SampleGithubPayload>({
+  body: '{"action":"opened","issue":{"number":42,"title":"test"}}',
+  signature: "sha256=sig",
+  secret: "gh_secret",
+});
+expectType<SampleGithubPayload>(assertedGithub);
+
+const parsedGhSig = parseGithubSignature("sha256=abcdef");
+expectType<string>(parsedGhSig);
+
+expectAssignable<GithubVerifyOptions>({
+  body: "test",
+  signature: "sha256=sig",
+  secret: "gh_secret",
 });
