@@ -276,7 +276,7 @@ export async function verifyShopifyWebhook<T = ShopifyWebhookEvent>(
   return {
     valid: true,
     rawBody,
-    payload,
+    payload: payload as T,
   };
 }
 

@@ -511,7 +511,7 @@ export async function verifyStripeWebhook<T = StripeWebhookEvent>(
     valid: true,
     rawBody,
     timestamp,
-    payload,
+    payload: payload as T,
   };
 }
 

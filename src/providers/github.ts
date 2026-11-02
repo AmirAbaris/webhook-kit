@@ -290,7 +290,7 @@ export async function verifyGithubWebhook<T = GithubWebhookEvent>(
   return {
     valid: true,
     rawBody,
-    payload,
+    payload: payload as T,
   };
 }
 
