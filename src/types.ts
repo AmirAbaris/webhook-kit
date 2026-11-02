@@ -23,7 +23,12 @@ export type HeaderRecord =
 export type SupportedAlgorithm = "SHA-256" | "SHA-384" | "SHA-512" | "SHA-1";
 
 /**
- * Options for generic webhook signature verification.
+ * Built-in webhook provider names supported by the unified verification API.
+ */
+export type BuiltinProviderName = "stripe" | "github" | "shopify";
+
+/**
+ * Options for generic or provider-specific webhook signature verification.
  */
 export interface WebhookVerifyOptions {
   /**
@@ -34,8 +39,9 @@ export interface WebhookVerifyOptions {
 
   /**
    * Signature string provided in the webhook header.
+   * Optional when `headers` or a `Request` `body` containing the signature header is passed.
    */
-  signature: string;
+  signature?: string;
 
   /**
    * Shared secret key or signing secret.
@@ -43,12 +49,23 @@ export interface WebhookVerifyOptions {
   secret: string | Uint8Array;
 
   /**
-   * Cryptographic hash algorithm. Defaults to 'SHA-256'.
+   * Optional built-in provider name ('stripe', 'github', 'shopify') or custom provider plugin.
+   * When omitted, generic HMAC verification is performed.
+   */
+  provider?: BuiltinProviderName | WebhookProviderPlugin<unknown, never>;
+
+  /**
+   * Cryptographic hash algorithm for generic HMAC verification. Defaults to 'SHA-256'.
    */
   algorithm?: SupportedAlgorithm;
 
   /**
-   * Optional incoming HTTP headers if provider requires extracting metadata.
+   * Signature digest encoding for generic HMAC verification. Defaults to 'hex'.
+   */
+  encoding?: "hex" | "base64";
+
+  /**
+   * Optional incoming HTTP headers if provider or generic verifier requires extracting metadata.
    */
   headers?: HeaderRecord;
 
@@ -58,24 +75,35 @@ export interface WebhookVerifyOptions {
   toleranceSeconds?: number;
 
   /**
-   * Timestamp extracted from header or options.
+   * Timestamp extracted from header or options (Unix seconds).
    */
   timestamp?: number | string;
+
+  /**
+   * Current Unix timestamp in seconds (defaults to Math.floor(Date.now() / 1000)).
+   * Useful for deterministic testing.
+   */
+  currentTimestamp?: number;
 
   /**
    * Whether to automatically parse the verified body as JSON. Defaults to true.
    */
   parseJson?: boolean;
+
+  /**
+   * If true, throws a WebhookKitError on failure instead of returning `{ valid: false, error }`.
+   */
+  throwOnError?: boolean;
 }
 
 /**
- * Structured outcome returned by verification operations.
+ * Successful outcome returned by verification operations.
  */
-export interface WebhookVerificationResult<T = unknown> {
+export interface WebhookVerificationSuccess<T = unknown> {
   /**
-   * True if signature matches and all validations (e.g. timestamp) passed.
+   * True when signature matches and all validations (e.g. timestamp) passed.
    */
-  valid: boolean;
+  valid: true;
 
   /**
    * Exact raw body string used in the HMAC calculation.
@@ -83,20 +111,58 @@ export interface WebhookVerificationResult<T = unknown> {
   rawBody: string;
 
   /**
-   * Typed parsed JSON payload, if parseJson was enabled and verification passed.
+   * Typed parsed JSON payload (or undefined if parseJson is false or body is non-JSON).
    */
-  payload?: T;
+  payload: T;
 
   /**
-   * Verified timestamp if present in the signature header.
+   * Verified timestamp if present in the signature header or options.
    */
   timestamp?: number;
 
   /**
-   * Verification error details if verification failed.
+   * Undefined on successful verification.
    */
-  error?: WebhookKitError;
+  error?: undefined;
 }
+
+/**
+ * Failed outcome returned by verification operations.
+ */
+export interface WebhookVerificationFailure {
+  /**
+   * False when signature or timestamp validation failed.
+   */
+  valid: false;
+
+  /**
+   * Exact raw body string used in the HMAC calculation.
+   */
+  rawBody: string;
+
+  /**
+   * Undefined on failed verification.
+   */
+  payload?: undefined;
+
+  /**
+   * Extracted timestamp if parsed prior to failure.
+   */
+  timestamp?: number;
+
+  /**
+   * Verification error details explaining the failure.
+   */
+  error: WebhookKitError;
+}
+
+/**
+ * Discriminated union outcome returned by verification operations.
+ * Narrowing via `if (result.valid)` narrows `result.payload` to `T`,
+ * while `if (!result.valid)` narrows `result.error` to `WebhookKitError`.
+ */
+export type WebhookVerificationResult<T = unknown> =
+  WebhookVerificationSuccess<T> | WebhookVerificationFailure;
 
 /**
  * Interface for extensible provider plugins (Stripe, GitHub, Shopify, etc.).

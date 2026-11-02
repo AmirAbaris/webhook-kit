@@ -9,7 +9,7 @@ export interface ProviderVerifyOptions {
   /**
    * Webhook signing secret provided by the platform dashboard.
    */
-  secret: string;
+  secret: string | Uint8Array;
 
   /**
    * Request headers or header value containing the signature.

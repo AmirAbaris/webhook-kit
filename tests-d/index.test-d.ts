@@ -5,6 +5,8 @@ import {
   computeSubtleHmac,
   timingSafeEqual,
   extractRawBody,
+  WebhookKitError,
+  type WebhookProviderPlugin,
   type WebhookVerificationResult,
   type WebhookVerifyOptions,
   type RawBody,
@@ -47,6 +49,16 @@ expectType<WebhookVerificationResult<SampleStripePayload>>(result);
 expectType<SampleStripePayload | undefined>(result.payload);
 expectType<string>(result.rawBody);
 expectType<boolean>(result.valid);
+
+if (result.valid) {
+  expectType<true>(result.valid);
+  expectType<SampleStripePayload>(result.payload);
+  expectType<undefined>(result.error);
+} else {
+  expectType<false>(result.valid);
+  expectType<undefined>(result.payload);
+  expectType<WebhookKitError>(result.error);
+}
 
 // 2. Verify assertWebhookSignature returns the narrowed payload directly
 const payload = await assertWebhookSignature<SampleStripePayload>({
@@ -231,3 +243,75 @@ expectAssignable<ShopifyVerifyOptions>({
   signature: "1Xxo0QsoTj2ehxeSIaTD+FTpmXYLkjV3cXSSGbFhbls=",
   secret: "shpss_secret",
 });
+
+const unifiedStripe = await verifyWebhookSignature({
+  provider: "stripe",
+  body: '{"id":"evt_1"}',
+  secret: "whsec_test",
+});
+expectType<WebhookVerificationResult<StripeWebhookEvent>>(unifiedStripe);
+
+const unifiedCustomStripe = await verifyWebhookSignature<SampleStripePayload>({
+  provider: "stripe",
+  body: '{"id":"evt_1"}',
+  secret: "whsec_test",
+});
+expectType<WebhookVerificationResult<SampleStripePayload>>(unifiedCustomStripe);
+
+const unifiedGithub = await verifyWebhookSignature({
+  provider: "github",
+  body: '{"action":"opened"}',
+  secret: "gh_secret",
+});
+expectType<WebhookVerificationResult<GithubWebhookEvent>>(unifiedGithub);
+
+const unifiedShopify = await verifyWebhookSignature({
+  provider: "shopify",
+  body: '{"id":123}',
+  secret: "shpss_secret",
+});
+expectType<WebhookVerificationResult<ShopifyWebhookEvent>>(unifiedShopify);
+
+const assertedUnifiedStripe = await assertWebhookSignature({
+  provider: "stripe",
+  body: '{"id":"evt_1"}',
+  secret: "whsec_test",
+});
+expectType<StripeWebhookEvent>(assertedUnifiedStripe);
+
+const assertedUnifiedGithub = await assertWebhookSignature<SampleGithubPayload>(
+  {
+    provider: "github",
+    body: '{"action":"opened"}',
+    secret: "gh_secret",
+  },
+);
+expectType<SampleGithubPayload>(assertedUnifiedGithub);
+
+const assertedUnifiedShopify = await assertWebhookSignature({
+  provider: "shopify",
+  body: '{"id":123}',
+  secret: "shpss_secret",
+});
+expectType<ShopifyWebhookEvent>(assertedUnifiedShopify);
+
+declare const customPlugin: WebhookProviderPlugin<
+  SampleShopifyPayload,
+  WebhookVerifyOptions
+>;
+
+const unifiedPluginResult = await verifyWebhookSignature({
+  provider: customPlugin,
+  body: '{"id":123}',
+  secret: "custom_secret",
+});
+expectType<WebhookVerificationResult<SampleShopifyPayload>>(
+  unifiedPluginResult,
+);
+
+const assertedPluginResult = await assertWebhookSignature({
+  provider: customPlugin,
+  body: '{"id":123}',
+  secret: "custom_secret",
+});
+expectType<SampleShopifyPayload>(assertedPluginResult);
