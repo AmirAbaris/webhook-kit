@@ -1,0 +1,48 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript"],
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "browser": true,
+    "node": true
+  },
+  "ignorePatterns": ["dist/*", "node_modules/*", ".pnpm-store/*", "coverage/*"],
+  "rules": {
+    "complexity": ["error", { "max": 7 }],
+    "no-undef": "warn",
+    "no-unused-vars": "warn",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-unsafe-function-type": "off",
+    "typescript/no-unused-vars": [
+      "warn",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["**/*.ts", "**/*.tsx"],
+      "rules": {
+        "no-redeclare": "off",
+        "no-undef": "off",
+        "no-unused-vars": "off"
+      }
+    },
+    {
+      "files": ["tests/**/*.ts", "tests-d/**/*.ts"],
+      "rules": {
+        "typescript/no-explicit-any": "off"
+      }
+    },
+    {
+      "files": ["tests-d/**/*.ts"],
+      "rules": {
+        "typescript/no-unused-vars": "off"
+      }
+    }
+  ]
+}

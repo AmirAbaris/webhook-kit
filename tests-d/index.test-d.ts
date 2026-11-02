@@ -2,6 +2,8 @@ import { expectType, expectAssignable } from "tsd";
 import {
   verifyWebhookSignature,
   assertWebhookSignature,
+  computeSubtleHmac,
+  timingSafeEqual,
   type WebhookVerificationResult,
   type WebhookVerifyOptions,
   type RawBody,
@@ -54,3 +56,34 @@ expectAssignable<WebhookVerifyOptions>({
   secret: "secret",
   toleranceSeconds: 300,
 });
+
+// 5. Verify computeSubtleHmac and timingSafeEqual types
+const defaultHmac = await computeSubtleHmac("SHA-256", "secret", "data");
+expectType<Uint8Array>(defaultHmac);
+
+const hexHmac = await computeSubtleHmac("SHA-256", "secret", "data", "hex");
+expectType<string>(hexHmac);
+
+const base64Hmac = await computeSubtleHmac(
+  "SHA-256",
+  "secret",
+  "data",
+  "base64",
+);
+expectType<string>(base64Hmac);
+
+const uint8Hmac = await computeSubtleHmac(
+  "SHA-256",
+  "secret",
+  "data",
+  "uint8array",
+);
+expectType<Uint8Array>(uint8Hmac);
+
+const optionsHexHmac = await computeSubtleHmac("SHA-256", "secret", "data", {
+  encoding: "hex",
+});
+expectType<string>(optionsHexHmac);
+
+const isEqual = timingSafeEqual(new Uint8Array([1]), new Uint8Array([1]));
+expectType<boolean>(isEqual);

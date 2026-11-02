@@ -79,10 +79,10 @@ pnpm install
 Before opening a pull request, run the following verification checks:
 
 ```bash
-# 1. Check code formatting & TypeScript types
+# 1. Run AST linters (oxlint + eslint statement padding & complexity), Prettier check, and full TypeScript check
 pnpm lint
 
-# 2. Automatically format code
+# 2. Automatically fix statement spacing and format code
 pnpm format
 
 # 3. Build dual distribution bundles (ESM/CJS and type declarations)
@@ -100,9 +100,19 @@ pnpm test:smoke
 
 ---
 
-## 5. Pull Request Guidelines
+## 5. Code Style, Spacing & Comment Standards
+
+1. **Vertical Spacing**: Always leave a blank line between top-level declarations, types, interfaces, exports, and function overload signatures. Never stack multi-line function overloads without blank lines between them (enforced by `@stylistic/padding-line-between-statements`).
+2. **Cyclomatic Complexity**: Keep functions focused with cyclomatic complexity ≤ 7 (enforced by `oxlint` and `eslint`). Extract small helper functions instead of deeply nested branches.
+3. **Contract JSDoc & `// WHY:` Comments**:
+   - **JSDoc**: Include a concise summary, `@param`, and `@returns` on public exports. Do not restate what TypeScript types already make obvious.
+   - **`// WHY:` Comments**: Add `// WHY:` comments directly above non-obvious implementation decisions (e.g., side-channel timing safety, runtime compatibility, or TypeScript `BufferSource` constraints). Never write comments that merely narrate what the code does.
+
+---
+
+## 6. Pull Request Guidelines
 
 1. **Keep PRs Focused**: Address one problem or feature per PR.
 2. **Include Tests**: Add unit tests in `tests/` and type tests in `tests-d/` whenever adding public API types or options.
-3. **Document Changes**: If introducing a new provider plugin or changing options, update `README.md` and `docs/agent-rules.md`.
+3. **Document Changes**: If introducing a new provider plugin or changing options, update `README.md`, `AGENTS.md`, and `docs/agent-rules.md`.
 4. **Checklist**: Fill out the structured PR template (`.github/PULL_REQUEST_TEMPLATE.md`).
