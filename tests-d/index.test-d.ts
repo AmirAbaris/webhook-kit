@@ -19,6 +19,11 @@ import {
   parseGithubSignature,
   type GithubWebhookEvent,
   type GithubVerifyOptions,
+  verifyShopifyWebhook,
+  assertShopifyWebhook,
+  parseShopifySignature,
+  type ShopifyWebhookEvent,
+  type ShopifyVerifyOptions,
 } from "../src/index.js";
 
 interface SampleStripePayload {
@@ -182,4 +187,47 @@ expectAssignable<GithubVerifyOptions>({
   body: "test",
   signature: "sha256=sig",
   secret: "gh_secret",
+});
+
+// 8. Verify Shopify provider type inference and narrowing
+const shopifyResult = await verifyShopifyWebhook({
+  body: '{"id":820982911946154500}',
+  signature: "1Xxo0QsoTj2ehxeSIaTD+FTpmXYLkjV3cXSSGbFhbls=",
+  secret: "shpss_secret",
+});
+expectType<WebhookVerificationResult<ShopifyWebhookEvent>>(shopifyResult);
+expectType<ShopifyWebhookEvent | undefined>(shopifyResult.payload);
+
+interface SampleShopifyPayload {
+  id: number;
+  total_price: string;
+  currency: string;
+}
+
+const customShopifyResult = await verifyShopifyWebhook<SampleShopifyPayload>({
+  body: '{"id":123,"total_price":"199.99","currency":"USD"}',
+  signature: "1Xxo0QsoTj2ehxeSIaTD+FTpmXYLkjV3cXSSGbFhbls=",
+  secret: "shpss_secret",
+});
+expectType<WebhookVerificationResult<SampleShopifyPayload>>(
+  customShopifyResult,
+);
+expectType<SampleShopifyPayload | undefined>(customShopifyResult.payload);
+
+const assertedShopify = await assertShopifyWebhook<SampleShopifyPayload>({
+  body: '{"id":123,"total_price":"199.99","currency":"USD"}',
+  signature: "1Xxo0QsoTj2ehxeSIaTD+FTpmXYLkjV3cXSSGbFhbls=",
+  secret: "shpss_secret",
+});
+expectType<SampleShopifyPayload>(assertedShopify);
+
+const parsedShopifySig = parseShopifySignature(
+  "1Xxo0QsoTj2ehxeSIaTD+FTpmXYLkjV3cXSSGbFhbls=",
+);
+expectType<string>(parsedShopifySig);
+
+expectAssignable<ShopifyVerifyOptions>({
+  body: "test",
+  signature: "1Xxo0QsoTj2ehxeSIaTD+FTpmXYLkjV3cXSSGbFhbls=",
+  secret: "shpss_secret",
 });

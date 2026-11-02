@@ -20,6 +20,13 @@ import {
   verifyGithubWebhook,
   type GithubWebhookEvent,
 } from "../src/providers/github.js";
+import {
+  assertShopifyWebhook,
+  parseShopifySignature,
+  shopifyPlugin,
+  verifyShopifyWebhook,
+  type ShopifyWebhookEvent,
+} from "../src/providers/shopify.js";
 
 /**
  * Helper to compute valid Stripe-Signature header value for tests.
@@ -668,7 +675,254 @@ describe("GitHub Provider", () => {
   });
 });
 
+/**
+ * Helper to compute valid X-Shopify-Hmac-Sha256 header value for tests.
+ */
+async function generateShopifyHeader(
+  secret: string,
+  rawBody: string,
+): Promise<string> {
+  return computeSubtleHmac("SHA-256", secret, rawBody, "base64");
+}
+
 describe("Shopify Provider", () => {
-  test.todo("should decode Base64 X-Shopify-Hmac-Sha256 signature header");
-  test.todo("should verify valid Shopify webhook HMAC");
+  const secret = "shpss_test_shopify_webhook_secret_key_999";
+  const rawPayload = JSON.stringify({
+    id: 820982911946154500,
+    admin_graphql_api_id: "gid://shopify/Order/820982911946154500",
+    created_at: "2026-11-02T12:00:00-04:00",
+    updated_at: "2026-11-02T12:00:00-04:00",
+    total_price: "199.99",
+    currency: "USD",
+    financial_status: "paid",
+  });
+
+  test("should decode Base64 X-Shopify-Hmac-Sha256 signature header", () => {
+    // 1. Standard Base64 SHA-256 digest (44 chars ending with =)
+    const standardHeader = "1Xxo0QsoTj2ehxeSIaTD+FTpmXYLkjV3cXSSGbFhbls=";
+    const parsed = parseShopifySignature(standardHeader);
+
+    expect(parsed).toBe("1Xxo0QsoTj2ehxeSIaTD+FTpmXYLkjV3cXSSGbFhbls=");
+
+    // 2. Extra whitespace around Base64 header
+    const paddedHeader = "  1Xxo0QsoTj2ehxeSIaTD+FTpmXYLkjV3cXSSGbFhbls=  ";
+    const parsedPadded = parseShopifySignature(paddedHeader);
+
+    expect(parsedPadded).toBe("1Xxo0QsoTj2ehxeSIaTD+FTpmXYLkjV3cXSSGbFhbls=");
+
+    // 3. Rejects missing or empty header
+    expect(() => parseShopifySignature("")).toThrow(
+      InvalidSignatureHeaderError,
+    );
+    expect(() => parseShopifySignature("   ")).toThrow(
+      InvalidSignatureHeaderError,
+    );
+    expect(() => parseShopifySignature(null as unknown as string)).toThrow(
+      InvalidSignatureHeaderError,
+    );
+
+    // 4. Rejects non-Base64 or malformed strings
+    expect(() => parseShopifySignature("not-valid-base64!!!")).toThrow(
+      InvalidSignatureHeaderError,
+    );
+    expect(() =>
+      parseShopifySignature("sha256=d57c68d10b284e3d9e87179221a4c3f8"),
+    ).toThrow(InvalidSignatureHeaderError);
+    expect(() => parseShopifySignature("abc")).toThrow(
+      InvalidSignatureHeaderError,
+    );
+  });
+
+  test("should verify valid Shopify webhook HMAC", async () => {
+    const validHeader = await generateShopifyHeader(secret, rawPayload);
+
+    // 1. Verify against raw string body
+    const result = await verifyShopifyWebhook<ShopifyWebhookEvent>({
+      body: rawPayload,
+      signature: validHeader,
+      secret,
+    });
+
+    expect(result.valid).toBe(true);
+    expect(result.rawBody).toBe(rawPayload);
+    expect(result.error).toBeUndefined();
+    expect(result.payload?.id).toBe(820982911946154500);
+    expect(result.payload?.admin_graphql_api_id).toBe(
+      "gid://shopify/Order/820982911946154500",
+    );
+    expect(result.payload?.total_price).toBe("199.99");
+
+    // 2. Verify against Web Standard Request object
+    const request = new Request("https://api.example.com/webhooks/shopify", {
+      method: "POST",
+      headers: { "x-shopify-hmac-sha256": validHeader },
+      body: rawPayload,
+    });
+
+    const requestResult = await verifyShopifyWebhook({
+      body: request,
+      secret,
+    });
+
+    expect(requestResult.valid).toBe(true);
+    expect(requestResult.rawBody).toBe(rawPayload);
+    expect(requestResult.payload).toBeDefined();
+
+    // 3. Verify with canonical/mixed-case header name in headers record
+    const headerResult = await verifyShopifyWebhook({
+      body: rawPayload,
+      headers: { "X-Shopify-Hmac-Sha256": validHeader },
+      secret,
+    });
+
+    expect(headerResult.valid).toBe(true);
+
+    // 4. Verify with Web Standard Headers instance
+    const headersInstance = new Headers();
+    headersInstance.set("x-shopify-hmac-sha256", validHeader);
+
+    const headersResult = await verifyShopifyWebhook({
+      body: rawPayload,
+      headers: headersInstance,
+      secret,
+    });
+
+    expect(headersResult.valid).toBe(true);
+
+    // 5. Verify assertShopifyWebhook returns parsed payload directly
+    const assertedPayload = await assertShopifyWebhook({
+      body: rawPayload,
+      signature: validHeader,
+      secret,
+    });
+
+    expect(assertedPayload.id).toBe(820982911946154500);
+    expect(assertedPayload.currency).toBe("USD");
+
+    // 6. Verify parseJson: false keeps payload undefined
+    const noParseResult = await verifyShopifyWebhook({
+      body: rawPayload,
+      signature: validHeader,
+      secret,
+      parseJson: false,
+    });
+
+    expect(noParseResult.valid).toBe(true);
+    expect(noParseResult.payload).toBeUndefined();
+
+    // 7. Verify shopifyPlugin contract
+    expect(shopifyPlugin.name).toBe("shopify");
+    const pluginResult = await shopifyPlugin.verify({
+      body: rawPayload,
+      signature: validHeader,
+      secret,
+    });
+
+    expect(pluginResult.valid).toBe(true);
+
+    // 8. Verify with non-JSON raw body
+    const textBody = "shopify_raw_non_json_body";
+    const textHeader = await generateShopifyHeader(secret, textBody);
+    const textResult = await verifyShopifyWebhook({
+      body: textBody,
+      signature: textHeader,
+      secret,
+    });
+
+    expect(textResult.valid).toBe(true);
+    expect(textResult.rawBody).toBe(textBody);
+    expect(textResult.payload).toBeUndefined();
+  });
+
+  test("should reject tampered Shopify payloads and invalid signatures", async () => {
+    const validHeader = await generateShopifyHeader(secret, rawPayload);
+
+    // 1. Tampered payload
+    const tamperedPayload = JSON.stringify({
+      id: 820982911946154500,
+      total_price: "0.00",
+      financial_status: "paid",
+    });
+
+    const tamperedResult = await verifyShopifyWebhook({
+      body: tamperedPayload,
+      signature: validHeader,
+      secret,
+    });
+
+    expect(tamperedResult.valid).toBe(false);
+    expect(tamperedResult.error).toBeInstanceOf(SignatureVerificationError);
+    expect(tamperedResult.error?.code).toBe("SIGNATURE_VERIFICATION_FAILED");
+
+    await expect(
+      assertShopifyWebhook({
+        body: tamperedPayload,
+        signature: validHeader,
+        secret,
+      }),
+    ).rejects.toThrow(SignatureVerificationError);
+
+    // 2. Mismatched signing secret
+    const wrongSecretResult = await verifyShopifyWebhook({
+      body: rawPayload,
+      signature: validHeader,
+      secret: "shpss_wrong_secret_key",
+    });
+
+    expect(wrongSecretResult.valid).toBe(false);
+    expect(wrongSecretResult.error).toBeInstanceOf(SignatureVerificationError);
+
+    // 3. Missing secret
+    const missingSecretResult = await verifyShopifyWebhook({
+      body: rawPayload,
+      signature: validHeader,
+      secret: "",
+    });
+
+    expect(missingSecretResult.valid).toBe(false);
+    expect(missingSecretResult.error).toBeInstanceOf(
+      SignatureVerificationError,
+    );
+
+    // 4. Missing signature header
+    const missingHeaderResult = await verifyShopifyWebhook({
+      body: rawPayload,
+      secret,
+    });
+
+    expect(missingHeaderResult.valid).toBe(false);
+    expect(missingHeaderResult.error).toBeInstanceOf(
+      InvalidSignatureHeaderError,
+    );
+
+    // 5. Malformed Base64 signature header
+    const malformedHeaderResult = await verifyShopifyWebhook({
+      body: rawPayload,
+      signature: "invalid_base64_header!!!",
+      secret,
+    });
+
+    expect(malformedHeaderResult.valid).toBe(false);
+    expect(malformedHeaderResult.error).toBeInstanceOf(
+      InvalidSignatureHeaderError,
+    );
+
+    // 6. throwOnError: true throws errors directly
+    await expect(
+      verifyShopifyWebhook({
+        body: tamperedPayload,
+        signature: validHeader,
+        secret,
+        throwOnError: true,
+      }),
+    ).rejects.toThrow(SignatureVerificationError);
+
+    await expect(
+      verifyShopifyWebhook({
+        body: rawPayload,
+        secret,
+        throwOnError: true,
+      }),
+    ).rejects.toThrow(InvalidSignatureHeaderError);
+  });
 });
