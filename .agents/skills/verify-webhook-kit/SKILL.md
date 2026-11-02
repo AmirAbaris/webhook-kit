@@ -31,7 +31,7 @@ Run this quick check to confirm the environment and dependencies are healthy:
 ```bash
 node -v && pnpm -v && pnpm lint
 ```
-- Node must be >= 18.0.0
+- Node must be >= 22.0.0
 - Formatting and strict TypeScript typechecking must pass with exit code 0.
 
 ## 4. Drive & Evidence

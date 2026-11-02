@@ -7,7 +7,7 @@ This document defines mandatory guidelines, conventions, and anti-patterns for A
 ## 1. Core Principles & Philosophy
 
 1. **Zero Runtime Dependencies**: `webhook-kit` core has zero third-party dependencies.
-2. **Universal Edge Compatibility**: Works identically across Node.js (18+), Bun, Deno, Cloudflare Workers, Next.js Edge, and Fastly Compute.
+2. **Universal Edge Compatibility**: Works identically across Node.js (22+), Bun, Deno, Cloudflare Workers, Next.js Edge, and Fastly Compute.
 3. **Web Standards First**: Relies entirely on Web APIs (`crypto.subtle`, `Request`, `Response`, `Headers`, `TextEncoder`, `TextDecoder`, `Uint8Array`). Never import `node:crypto` into core library modules.
 4. **Cryptographic Rigor**: All signature verifications and comparisons must be timing-safe to eliminate side-channel vulnerabilities.
 
