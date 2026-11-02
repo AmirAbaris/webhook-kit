@@ -9,7 +9,7 @@ Please review the following standards and workflow to make your contribution pro
 ## 1. Development Principles
 
 1. **Zero Runtime Dependencies**: Every feature must run without third-party production dependencies.
-2. **Universal Runtime Support**: Must work seamlessly across Node.js 18+, Bun, Deno, Cloudflare Workers, and Next.js Edge.
+2. **Universal Runtime Support**: Must work seamlessly across Node.js 22+, Bun, Deno, Cloudflare Workers, and Next.js Edge.
 3. **Web Standards First**: Always use `crypto.subtle`, Web Standard `Request`, `Uint8Array`, and `TextDecoder`. Do not use `node:crypto` in universal code.
 4. **Constant-Time Verification**: All cryptographic comparisons must be timing-safe to eliminate side-channel vulnerabilities.
 
@@ -60,7 +60,7 @@ type(scope): brief description in imperative mood
 
 ### Prerequisites
 
-- Node.js >= 18.0.0
+- Node.js >= 22.0.0
 - pnpm >= 9.0.0 (or npm / corepack)
 
 ### Setup

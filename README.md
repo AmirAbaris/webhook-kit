@@ -58,7 +58,7 @@ export async function POST(req: Request) {
 
 | Runtime                   | Support     | Notes                                  |
 | ------------------------- | ----------- | -------------------------------------- |
-| **Node.js**               | `>= 18.0.0` | Uses native `globalThis.crypto.subtle` |
+| **Node.js**               | `>= 22.0.0` | Uses native `globalThis.crypto.subtle` |
 | **Bun**                   | `>= 1.0.0`  | Native Web Cryptography API            |
 | **Deno**                  | `>= 1.30.0` | Native Web Standards                   |
 | **Cloudflare Workers**    | Supported   | Zero Node polyfills needed             |
