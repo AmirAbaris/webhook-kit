@@ -26,13 +26,13 @@ Verify ready state:
 
 ## 3. Doctor
 
-Run this quick check to confirm the environment and dependencies are healthy:
+Run this quick check to confirm the environment, dependencies, AST lint rules, statement spacing, and full test-suite types are healthy:
 
 ```bash
 node -v && pnpm -v && pnpm lint
 ```
 - Node must be >= 22.0.0
-- Formatting and strict TypeScript typechecking must pass with exit code 0.
+- `oxlint` (correctness & cyclomatic complexity ≤ 7), `eslint` (`@stylistic/padding-line-between-statements`, `no-restricted-imports` for `node:crypto`), Prettier formatting, and strict TypeScript typechecking across `src/`, `tests/`, and `tests-d/` (`tsconfig.lint.json`) must all pass with exit code 0.
 
 ## 4. Drive & Evidence
 
