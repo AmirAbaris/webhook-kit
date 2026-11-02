@@ -4,7 +4,12 @@ import type { WebhookKitError } from "./errors.js";
  * Supported raw body representations across runtimes (Node, Edge, Browser, Bun, Deno).
  */
 export type RawBody =
-  string | Uint8Array | ArrayBuffer | ReadableStream<Uint8Array> | Request;
+  | string
+  | Uint8Array
+  | ArrayBuffer
+  | ArrayBufferView
+  | ReadableStream<Uint8Array>
+  | Request;
 
 /**
  * Standard or framework headers representation.

@@ -4,6 +4,7 @@ import {
   assertWebhookSignature,
   computeSubtleHmac,
   timingSafeEqual,
+  extractRawBody,
   type WebhookVerificationResult,
   type WebhookVerifyOptions,
   type RawBody,
@@ -43,11 +44,20 @@ expectType<SampleStripePayload>(payload);
 // 3. Verify RawBody accepts supported edge/web representations
 declare const strBody: string;
 declare const bufferBody: Uint8Array;
+declare const arrayBufferBody: ArrayBuffer;
+declare const viewBody: DataView;
+declare const streamBody: ReadableStream<Uint8Array>;
 declare const requestBody: Request;
 
 expectAssignable<RawBody>(strBody);
 expectAssignable<RawBody>(bufferBody);
+expectAssignable<RawBody>(arrayBufferBody);
+expectAssignable<RawBody>(viewBody);
+expectAssignable<RawBody>(streamBody);
 expectAssignable<RawBody>(requestBody);
+
+const extractedBody = await extractRawBody(requestBody);
+expectType<string>(extractedBody);
 
 // 4. Verify WebhookVerifyOptions structure
 expectAssignable<WebhookVerifyOptions>({
