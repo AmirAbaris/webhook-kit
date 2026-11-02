@@ -13,6 +13,13 @@ import {
   verifyStripeWebhook,
   type StripeWebhookEvent,
 } from "../src/providers/stripe.js";
+import {
+  assertGithubWebhook,
+  githubPlugin,
+  parseGithubSignature,
+  verifyGithubWebhook,
+  type GithubWebhookEvent,
+} from "../src/providers/github.js";
 
 /**
  * Helper to compute valid Stripe-Signature header value for tests.
@@ -363,10 +370,302 @@ describe("Stripe Provider", () => {
   });
 });
 
+/**
+ * Helper to compute valid X-Hub-Signature-256 header value for tests.
+ */
+async function generateGithubHeader(
+  secret: string,
+  rawBody: string,
+): Promise<string> {
+  const sig = await computeSubtleHmac("SHA-256", secret, rawBody, "hex");
+
+  return `sha256=${sig}`;
+}
+
 describe("GitHub Provider", () => {
-  test.todo("should parse X-Hub-Signature-256 sha256=... header");
-  test.todo("should verify valid GitHub webhook HMAC-SHA256");
-  test.todo("should reject tampered GitHub payloads");
+  const secret = "github_webhook_secret_key_67890";
+  const rawPayload = JSON.stringify({
+    action: "opened",
+    issue: {
+      number: 42,
+      title: "Bug report: verification error",
+    },
+    repository: {
+      id: 12345678,
+      name: "webhook-kit",
+      full_name: "AmirAbaris/webhook-kit",
+    },
+    sender: {
+      login: "octocat",
+      id: 1,
+    },
+  });
+
+  test("should parse X-Hub-Signature-256 sha256=... header", () => {
+    // 1. Standard format
+    const standardHeader =
+      "sha256=d57c68d10b284e3d9e87179221a4c3f854e999760b92357771749219b1618e5b";
+    const parsed = parseGithubSignature(standardHeader);
+
+    expect(parsed).toBe(
+      "d57c68d10b284e3d9e87179221a4c3f854e999760b92357771749219b1618e5b",
+    );
+
+    // 2. Extra whitespace around header and around signature
+    const paddedHeader =
+      "  sha256=  757107ea0eb2509fc211221cce984b8a37570b6d7586c22c30e411043c578f6a  ";
+    const parsedPadded = parseGithubSignature(paddedHeader);
+
+    expect(parsedPadded).toBe(
+      "757107ea0eb2509fc211221cce984b8a37570b6d7586c22c30e411043c578f6a",
+    );
+
+    // 3. Uppercase SHA256= prefix
+    const upperHeader =
+      "SHA256=d57c68d10b284e3d9e87179221a4c3f854e999760b92357771749219b1618e5b";
+    const parsedUpper = parseGithubSignature(upperHeader);
+
+    expect(parsedUpper).toBe(
+      "d57c68d10b284e3d9e87179221a4c3f854e999760b92357771749219b1618e5b",
+    );
+
+    // 4. Rejects missing or empty header
+    expect(() => parseGithubSignature("")).toThrow(InvalidSignatureHeaderError);
+    expect(() => parseGithubSignature("   ")).toThrow(
+      InvalidSignatureHeaderError,
+    );
+    expect(() => parseGithubSignature(null as unknown as string)).toThrow(
+      InvalidSignatureHeaderError,
+    );
+
+    // 5. Rejects header with missing or incorrect prefix (e.g. sha1= or bare hex)
+    expect(() => parseGithubSignature("sha1=d57c68d10b284e3d")).toThrow(
+      InvalidSignatureHeaderError,
+    );
+    expect(() =>
+      parseGithubSignature(
+        "d57c68d10b284e3d9e87179221a4c3f854e999760b92357771749219b1618e5b",
+      ),
+    ).toThrow(InvalidSignatureHeaderError);
+    expect(() => parseGithubSignature("invalid_header")).toThrow(
+      InvalidSignatureHeaderError,
+    );
+
+    // 6. Rejects header with empty signature after prefix
+    expect(() => parseGithubSignature("sha256=")).toThrow(
+      InvalidSignatureHeaderError,
+    );
+    expect(() => parseGithubSignature("sha256=   ")).toThrow(
+      InvalidSignatureHeaderError,
+    );
+  });
+
+  test("should verify valid GitHub webhook HMAC-SHA256", async () => {
+    const validHeader = await generateGithubHeader(secret, rawPayload);
+
+    // 1. Verify against raw string body
+    const result = await verifyGithubWebhook<GithubWebhookEvent>({
+      body: rawPayload,
+      signature: validHeader,
+      secret,
+    });
+
+    expect(result.valid).toBe(true);
+    expect(result.rawBody).toBe(rawPayload);
+    expect(result.error).toBeUndefined();
+    expect(result.payload?.action).toBe("opened");
+    expect(result.payload?.repository?.name).toBe("webhook-kit");
+    expect(result.payload?.sender?.login).toBe("octocat");
+
+    // 2. Verify against Web Standard Request object
+    const request = new Request("https://api.example.com/webhooks/github", {
+      method: "POST",
+      headers: { "x-hub-signature-256": validHeader },
+      body: rawPayload,
+    });
+
+    const requestResult = await verifyGithubWebhook({
+      body: request,
+      secret,
+    });
+
+    expect(requestResult.valid).toBe(true);
+    expect(requestResult.rawBody).toBe(rawPayload);
+    expect(requestResult.payload).toBeDefined();
+
+    // 3. Verify with uppercase/canonical header name in headers record
+    const headerResult = await verifyGithubWebhook({
+      body: rawPayload,
+      headers: { "X-Hub-Signature-256": validHeader },
+      secret,
+    });
+
+    expect(headerResult.valid).toBe(true);
+
+    // 4. Verify with Web Standard Headers instance
+    const headersInstance = new Headers();
+    headersInstance.set("x-hub-signature-256", validHeader);
+
+    const headersResult = await verifyGithubWebhook({
+      body: rawPayload,
+      headers: headersInstance,
+      secret,
+    });
+
+    expect(headersResult.valid).toBe(true);
+
+    // 5. Verify case-insensitivity of hex signature comparison (e.g. uppercase hex in header)
+    const upperHexSig = (
+      await computeSubtleHmac("SHA-256", secret, rawPayload, "hex")
+    ).toUpperCase();
+    const upperSigHeader = `sha256=${upperHexSig}`;
+
+    const upperSigResult = await verifyGithubWebhook({
+      body: rawPayload,
+      signature: upperSigHeader,
+      secret,
+    });
+
+    expect(upperSigResult.valid).toBe(true);
+
+    // 6. Verify assertGithubWebhook returns parsed payload directly
+    const assertedPayload = await assertGithubWebhook({
+      body: rawPayload,
+      signature: validHeader,
+      secret,
+    });
+
+    expect(assertedPayload.action).toBe("opened");
+    expect(assertedPayload.repository?.name).toBe("webhook-kit");
+
+    // 7. Verify parseJson: false keeps payload undefined
+    const noParseResult = await verifyGithubWebhook({
+      body: rawPayload,
+      signature: validHeader,
+      secret,
+      parseJson: false,
+    });
+
+    expect(noParseResult.valid).toBe(true);
+    expect(noParseResult.payload).toBeUndefined();
+
+    // 8. Verify githubPlugin contract
+    expect(githubPlugin.name).toBe("github");
+    const pluginResult = await githubPlugin.verify({
+      body: rawPayload,
+      signature: validHeader,
+      secret,
+    });
+
+    expect(pluginResult.valid).toBe(true);
+
+    // 9. Verify with non-JSON raw body (e.g. plain text or urlencoded)
+    const textBody = "payload=test_non_json_content";
+    const textHeader = await generateGithubHeader(secret, textBody);
+    const textResult = await verifyGithubWebhook({
+      body: textBody,
+      signature: textHeader,
+      secret,
+    });
+
+    expect(textResult.valid).toBe(true);
+    expect(textResult.rawBody).toBe(textBody);
+    expect(textResult.payload).toBeUndefined();
+  });
+
+  test("should reject tampered GitHub payloads", async () => {
+    const validHeader = await generateGithubHeader(secret, rawPayload);
+
+    // 1. Tampered payload
+    const tamperedPayload = JSON.stringify({
+      action: "opened",
+      issue: {
+        number: 42,
+        title: "Malicious injection attempt",
+      },
+    });
+
+    const tamperedResult = await verifyGithubWebhook({
+      body: tamperedPayload,
+      signature: validHeader,
+      secret,
+    });
+
+    expect(tamperedResult.valid).toBe(false);
+    expect(tamperedResult.error).toBeInstanceOf(SignatureVerificationError);
+    expect(tamperedResult.error?.code).toBe("SIGNATURE_VERIFICATION_FAILED");
+
+    await expect(
+      assertGithubWebhook({
+        body: tamperedPayload,
+        signature: validHeader,
+        secret,
+      }),
+    ).rejects.toThrow(SignatureVerificationError);
+
+    // 2. Mismatched signing secret
+    const wrongSecretResult = await verifyGithubWebhook({
+      body: rawPayload,
+      signature: validHeader,
+      secret: "wrong_secret_key_12345",
+    });
+
+    expect(wrongSecretResult.valid).toBe(false);
+    expect(wrongSecretResult.error).toBeInstanceOf(SignatureVerificationError);
+
+    // 3. Missing secret
+    const missingSecretResult = await verifyGithubWebhook({
+      body: rawPayload,
+      signature: validHeader,
+      secret: "",
+    });
+
+    expect(missingSecretResult.valid).toBe(false);
+    expect(missingSecretResult.error).toBeInstanceOf(
+      SignatureVerificationError,
+    );
+
+    // 4. Missing signature header
+    const missingHeaderResult = await verifyGithubWebhook({
+      body: rawPayload,
+      secret,
+    });
+
+    expect(missingHeaderResult.valid).toBe(false);
+    expect(missingHeaderResult.error).toBeInstanceOf(
+      InvalidSignatureHeaderError,
+    );
+
+    // 5. Malformed signature header (e.g. invalid prefix)
+    const malformedHeaderResult = await verifyGithubWebhook({
+      body: rawPayload,
+      signature: "sha1=not_a_valid_sha256_header",
+      secret,
+    });
+
+    expect(malformedHeaderResult.valid).toBe(false);
+    expect(malformedHeaderResult.error).toBeInstanceOf(
+      InvalidSignatureHeaderError,
+    );
+
+    // 6. throwOnError: true throws errors directly
+    await expect(
+      verifyGithubWebhook({
+        body: tamperedPayload,
+        signature: validHeader,
+        secret,
+        throwOnError: true,
+      }),
+    ).rejects.toThrow(SignatureVerificationError);
+
+    await expect(
+      verifyGithubWebhook({
+        body: rawPayload,
+        secret,
+        throwOnError: true,
+      }),
+    ).rejects.toThrow(InvalidSignatureHeaderError);
+  });
 });
 
 describe("Shopify Provider", () => {
