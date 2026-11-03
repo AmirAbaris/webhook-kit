@@ -102,6 +102,7 @@ try {
     import {
       verifyWebhookSignature,
       assertWebhookSignature,
+      createWebhookHandler,
       WebhookKitError,
       SignatureVerificationError
     } from '@amirabaris/webhook-kit';
@@ -111,6 +112,9 @@ try {
     }
     if (typeof assertWebhookSignature !== 'function') {
       throw new Error('assertWebhookSignature is not exported as a function');
+    }
+    if (typeof createWebhookHandler !== 'function') {
+      throw new Error('createWebhookHandler is not exported as a function');
     }
     if (typeof WebhookKitError !== 'function') {
       throw new Error('WebhookKitError is not exported');
