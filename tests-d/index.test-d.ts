@@ -26,6 +26,10 @@ import {
   parseShopifySignature,
   type ShopifyWebhookEvent,
   type ShopifyVerifyOptions,
+  CryptoKeyLruCache,
+  getCachedCryptoKey,
+  clearCryptoKeyCache,
+  getCryptoKeyCacheSize,
 } from "../src/index.js";
 
 interface SampleStripePayload {
@@ -315,3 +319,18 @@ const assertedPluginResult = await assertWebhookSignature({
   secret: "custom_secret",
 });
 expectType<SampleShopifyPayload>(assertedPluginResult);
+
+// 9. Verify CryptoKey cache utilities and LRU types
+clearCryptoKeyCache();
+const cacheSize = getCryptoKeyCacheSize();
+expectType<number>(cacheSize);
+
+const cachedKey = await getCachedCryptoKey("SHA-256", "secret");
+expectType<CryptoKey>(cachedKey);
+
+const customCache = new CryptoKeyLruCache(100);
+expectType<number>(customCache.size);
+expectType<number>(customCache.capacity);
+expectType<boolean>(customCache.has("key"));
+expectType<boolean>(customCache.delete("key"));
+customCache.clear();

@@ -1,9 +1,13 @@
-import { describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
   base64ToBytes,
   bytesToBase64,
   bytesToHex,
+  clearCryptoKeyCache,
   computeSubtleHmac,
+  CryptoKeyLruCache,
+  getCachedCryptoKey,
+  getCryptoKeyCacheSize,
   hexToBytes,
   timingSafeEqual,
 } from "../src/crypto/subtle.js";
@@ -174,5 +178,165 @@ describe("encoding helper utilities", () => {
     expect(b64).toBe("SGVsbG8h");
     const decoded = base64ToBytes(b64);
     expect(decoded).toEqual(original);
+  });
+});
+
+describe("CryptoKey memoization and LRU cache", () => {
+  beforeEach(() => {
+    clearCryptoKeyCache();
+    vi.restoreAllMocks();
+  });
+
+  test("should memoize imported CryptoKey across subsequent computeSubtleHmac calls", async () => {
+    const importSpy = vi.spyOn(crypto.subtle, "importKey");
+    const secret = "shared_webhook_secret_key";
+    const data = "payload_content";
+
+    const digest1 = await computeSubtleHmac("SHA-256", secret, data, "hex");
+    const digest2 = await computeSubtleHmac("SHA-256", secret, data, "hex");
+    const digest3 = await computeSubtleHmac("SHA-256", secret, data, "hex");
+
+    expect(digest1).toBe(digest2);
+    expect(digest2).toBe(digest3);
+    expect(importSpy).toHaveBeenCalledTimes(1);
+    expect(getCryptoKeyCacheSize()).toBe(1);
+  });
+
+  test("getCachedCryptoKey returns the exact same CryptoKey instance", async () => {
+    const secret = "whsec_test_instance_identity";
+    const key1 = await getCachedCryptoKey("SHA-256", secret);
+    const key2 = await getCachedCryptoKey("SHA-256", secret);
+
+    expect(key1).toBe(key2);
+  });
+
+  test("should reuse cached key across string and Uint8Array secret representations", async () => {
+    const importSpy = vi.spyOn(crypto.subtle, "importKey");
+    const secretStr = "whsec_flexible_representation";
+    const secretBytes = new TextEncoder().encode(secretStr);
+
+    const keyStr = await getCachedCryptoKey("SHA-256", secretStr);
+    const keyBytes = await getCachedCryptoKey("SHA-256", secretBytes);
+
+    expect(keyStr).toBe(keyBytes);
+    expect(importSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test("should normalize algorithm names for cache lookups", async () => {
+    const importSpy = vi.spyOn(crypto.subtle, "importKey");
+    const secret = "whsec_normalized_algo";
+
+    const key1 = await getCachedCryptoKey("sha256", secret);
+    const key2 = await getCachedCryptoKey("SHA-256", secret);
+    const key3 = await getCachedCryptoKey("SHA256", secret);
+
+    expect(key1).toBe(key2);
+    expect(key2).toBe(key3);
+    expect(importSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test("should store distinct keys for different secrets or different algorithms", async () => {
+    const importSpy = vi.spyOn(crypto.subtle, "importKey");
+
+    const keyA = await getCachedCryptoKey("SHA-256", "secret_one");
+    const keyB = await getCachedCryptoKey("SHA-256", "secret_two");
+    const keyC = await getCachedCryptoKey("SHA-384", "secret_one");
+
+    expect(keyA).not.toBe(keyB);
+    expect(keyA).not.toBe(keyC);
+    expect(importSpy).toHaveBeenCalledTimes(3);
+    expect(getCryptoKeyCacheSize()).toBe(3);
+  });
+
+  test("should reuse in-flight promises across concurrent requests without duplicate importKey calls", async () => {
+    const importSpy = vi.spyOn(crypto.subtle, "importKey");
+    const secret = "whsec_concurrent_requests";
+    const count = 10;
+
+    const results = await Promise.all(
+      Array.from({ length: count }, (_, i) =>
+        computeSubtleHmac("SHA-256", secret, `payload_${i}`, "hex"),
+      ),
+    );
+
+    expect(results).toHaveLength(count);
+    expect(importSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test("should bypass cache when bypassCache option is true", async () => {
+    const importSpy = vi.spyOn(crypto.subtle, "importKey");
+    const secret = "whsec_bypass_cache";
+
+    await computeSubtleHmac("SHA-256", secret, "data1", {
+      encoding: "hex",
+      bypassCache: true,
+    });
+    await computeSubtleHmac("SHA-256", secret, "data2", {
+      encoding: "hex",
+      bypassCache: true,
+    });
+
+    expect(importSpy).toHaveBeenCalledTimes(2);
+  });
+
+  test("clearCryptoKeyCache should reset the cache", async () => {
+    await getCachedCryptoKey("SHA-256", "secret_to_clear");
+    expect(getCryptoKeyCacheSize()).toBe(1);
+
+    clearCryptoKeyCache();
+    expect(getCryptoKeyCacheSize()).toBe(0);
+  });
+
+  test("CryptoKeyLruCache should evict least recently used entries when capacity is exceeded", async () => {
+    const cache = new CryptoKeyLruCache(2);
+    expect(cache.capacity).toBe(2);
+
+    const makeKeyPromise = () =>
+      crypto.subtle.importKey(
+        "raw",
+        new Uint8Array([1, 2, 3]),
+        { name: "HMAC", hash: { name: "SHA-256" } },
+        false,
+        ["sign"],
+      );
+
+    const p1 = makeKeyPromise();
+    const p2 = makeKeyPromise();
+    const p3 = makeKeyPromise();
+
+    cache.set("key1", p1);
+    cache.set("key2", p2);
+    expect(cache.size).toBe(2);
+    expect(cache.has("key1")).toBe(true);
+    expect(cache.has("key2")).toBe(true);
+
+    // Access key1 so key2 becomes least recently used
+    expect(cache.get("key1")).toBe(p1);
+
+    // Insert key3, which should evict key2
+    cache.set("key3", p3);
+    expect(cache.size).toBe(2);
+    expect(cache.has("key1")).toBe(true);
+    expect(cache.has("key2")).toBe(false);
+    expect(cache.has("key3")).toBe(true);
+
+    // Test delete and clear
+    expect(cache.delete("key1")).toBe(true);
+    expect(cache.has("key1")).toBe(false);
+    cache.clear();
+    expect(cache.size).toBe(0);
+  });
+
+  test("failed importKey should evict from cache to prevent poison state", async () => {
+    const cache = new CryptoKeyLruCache(10);
+    const rejectPromise = Promise.reject(new Error("invalid key"));
+
+    rejectPromise.catch(() => {
+      cache.delete("bad_key");
+    });
+    cache.set("bad_key", rejectPromise);
+
+    await expect(cache.get("bad_key")).rejects.toThrow("invalid key");
+    expect(cache.has("bad_key")).toBe(false);
   });
 });
