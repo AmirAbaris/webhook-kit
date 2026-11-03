@@ -22,7 +22,7 @@ export async function POST(req: Request) {
 }
 
 // ✅ WITH WEBHOOK-KIT: Direct Web Standard verification & constant-time check
-import { verifyWebhookSignature } from "webhook-kit";
+import { verifyWebhookSignature } from "@amirabaris/webhook-kit";
 
 export async function POST(req: Request) {
   const result = await verifyWebhookSignature({
@@ -71,16 +71,16 @@ export async function POST(req: Request) {
 
 ```bash
 # pnpm
-pnpm add webhook-kit
+pnpm add @amirabaris/webhook-kit
 
 # npm
-npm install webhook-kit
+npm install @amirabaris/webhook-kit
 
 # bun
-bun add webhook-kit
+bun add @amirabaris/webhook-kit
 
 # yarn
-yarn add webhook-kit
+yarn add @amirabaris/webhook-kit
 ```
 
 ---
@@ -92,7 +92,10 @@ yarn add webhook-kit
 `webhook-kit` provides a single unified entry point `verifyWebhookSignature` (and `assertWebhookSignature`) that works seamlessly across providers and runtimes:
 
 ```ts
-import { verifyWebhookSignature, assertWebhookSignature } from "webhook-kit";
+import {
+  verifyWebhookSignature,
+  assertWebhookSignature,
+} from "@amirabaris/webhook-kit";
 
 // 1. Result-based verification (discriminated union)
 const result = await verifyWebhookSignature({
@@ -129,7 +132,7 @@ Next.js App Router route handlers receive standard Web `Request` objects. Pass `
 ```ts
 // app/api/webhook/route.ts
 import { NextResponse } from "next/server";
-import { verifyWebhookSignature } from "webhook-kit";
+import { verifyWebhookSignature } from "@amirabaris/webhook-kit";
 
 export async function POST(req: Request) {
   // CRITICAL: Pass the Web Standard `Request` object directly to `body`.
@@ -175,7 +178,7 @@ In Hono, `c.req.raw` exposes the underlying Web Standard `Request`:
 ```ts
 // src/index.ts
 import { Hono } from "hono";
-import { verifyWebhookSignature } from "webhook-kit";
+import { verifyWebhookSignature } from "@amirabaris/webhook-kit";
 
 type Bindings = {
   GITHUB_WEBHOOK_SECRET: string;
@@ -208,7 +211,7 @@ export default app;
 #### Cloudflare Workers (Native `fetch`)
 
 ```ts
-import { verifyWebhookSignature } from "webhook-kit";
+import { verifyWebhookSignature } from "@amirabaris/webhook-kit";
 
 interface Env {
   STRIPE_WEBHOOK_SECRET: string;
@@ -251,7 +254,7 @@ Configure your webhook endpoint with `express.raw({ type: "application/json" })`
 ```ts
 // server.ts
 import express from "express";
-import { verifyWebhookSignature } from "webhook-kit";
+import { verifyWebhookSignature } from "@amirabaris/webhook-kit";
 
 const app = express();
 
@@ -293,7 +296,7 @@ app.listen(3000, () => console.log("Server listening on port 3000"));
 ```ts
 // server.mjs
 import http from "node:http";
-import { verifyWebhookSignature } from "webhook-kit";
+import { verifyWebhookSignature } from "@amirabaris/webhook-kit";
 
 const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && req.url === "/api/webhook") {
@@ -368,7 +371,7 @@ import {
   TimestampToleranceError,
   InvalidSignatureHeaderError,
   PayloadExtractionError,
-} from "webhook-kit";
+} from "@amirabaris/webhook-kit";
 
 try {
   const event = await assertWebhookSignature({
@@ -463,7 +466,7 @@ flowchart LR
 Run the built-in zero-dependency CLI to inject webhook rules into your project's `AGENTS.md` or `CLAUDE.md`:
 
 ```bash
-npx webhook-kit init-agent
+npx @amirabaris/webhook-kit init-agent
 ```
 
 For full details, see the [Agent Rules Guide](file:///docs/agent-rules.md).

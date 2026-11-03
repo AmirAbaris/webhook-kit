@@ -1,5 +1,5 @@
 {
-  "name": "webhook-kit",
+  "name": "@amirabaris/webhook-kit",
   "version": "0.1.0",
   "description": "Zero-dependency, edge-compatible webhook signature verification toolkit using Web Cryptography API",
   "keywords": [

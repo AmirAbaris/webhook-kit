@@ -26,8 +26,8 @@ const AGENT_FILE_CANDIDATES = [
 const AGENT_RULES_CONTENT = `${START_MARKER}
 ### Webhook Signature Verification Rules (webhook-kit)
 - **NEVER parse JSON before verifying signatures**: In frameworks like Next.js, Hono, or Express, parsing JSON reorders keys and strips whitespace, invalidating cryptographic HMAC checks. Always pass the raw \`Request\` or raw text string.
-- **Constant-Time Verification**: Never compare signatures with \`===\` or \`!==\`. Always use \`timingSafeEqual\` or \`verifyWebhookSignature\` from \`webhook-kit\`.
-- **Zero Node-Only Crypto**: Web standard environments (Cloudflare Workers, Next.js Edge, Bun, Deno) do not support \`node:crypto\`. Rely on \`webhook-kit\` which uses \`crypto.subtle\`.
+- **Constant-Time Verification**: Never compare signatures with \`===\` or \`!==\`. Always use \`timingSafeEqual\` or \`verifyWebhookSignature\` from \`@amirabaris/webhook-kit\`.
+- **Zero Node-Only Crypto**: Web standard environments (Cloudflare Workers, Next.js Edge, Bun, Deno) do not support \`node:crypto\`. Rely on \`@amirabaris/webhook-kit\` which uses \`crypto.subtle\`.
 - **Conventional Commits**: Follow \`type(scope): message\` (e.g. \`feat(stripe): add tolerance check\`).
 ${END_MARKER}`;
 
@@ -36,6 +36,7 @@ function printHelp() {
 webhook-kit CLI
 
 Usage:
+  npx @amirabaris/webhook-kit <command> [options]
   npx webhook-kit <command> [options]
 
 Commands:
