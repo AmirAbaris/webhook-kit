@@ -12,21 +12,25 @@ export function RecipesSection() {
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="max-w-2xl">
           <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-            Framework Recipes
+            Framework Recipes & Live Snippets
           </p>
           <h2
             id="recipes-heading"
             className="mt-2 text-2xl font-bold tracking-tight text-foreground sm:text-3xl"
           >
-            Pass the native Web Standard Request directly
+            Automatic Stream-Cloning & Universal Handlers
           </h2>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
-            Whether you deploy on Next.js App Router, Hono, or Cloudflare
-            Workers,{" "}
+            Every Web Standard Request is automatically cloned with{" "}
             <code className="rounded-xs bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
-              verifyWebhookSignature
-            </code>{" "}
-            clones and reads the raw request stream before parsing JSON.
+              request.clone()
+            </code>
+            . Your original request stream remains unconsumed (
+            <code className="rounded-xs bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+              bodyUsed: false
+            </code>
+            ), safe for downstream JSON parsing, logging, proxy forwarding, or
+            queues across Next.js, Hono, and Cloudflare Workers.
           </p>
         </div>
 
@@ -47,7 +51,7 @@ export function RecipesSection() {
                 <CodeBlock
                   code={recipe.code}
                   filename={recipe.filename}
-                  badge="Type-Narrowed Result"
+                  badge="Zero Stream Lock"
                   badgeVariant="success"
                 />
               </TabsContent>

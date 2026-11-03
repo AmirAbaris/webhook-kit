@@ -44,6 +44,18 @@ export function SiteHeader() {
           >
             Recipes
           </a>
+          <a
+            href="#store"
+            className="hidden rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground md:inline-flex"
+          >
+            Replay Store
+          </a>
+          <a
+            href="#runtimes"
+            className="hidden rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground md:inline-flex"
+          >
+            Runtimes
+          </a>
           <Button asChild variant="outline" size="sm">
             <a
               href={SITE.npmUrl}
