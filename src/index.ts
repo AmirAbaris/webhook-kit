@@ -7,6 +7,7 @@
 export * from "./types.js";
 export * from "./errors.js";
 export * from "./verify.js";
+export * from "./handler.js";
 export * from "./utils/extract-body.js";
 export * from "./crypto/subtle.js";
 export * from "./providers/index.js";
