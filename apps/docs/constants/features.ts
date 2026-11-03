@@ -1,12 +1,5 @@
 import type { LucideIcon } from "lucide-react"
-import {
-  Bot,
-  Clock,
-  Feather,
-  Globe,
-  Puzzle,
-  ShieldCheck,
-} from "lucide-react"
+import { Bot, Clock, Feather, Globe, Puzzle, ShieldCheck } from "lucide-react"
 
 export interface FeatureItem {
   id: string
