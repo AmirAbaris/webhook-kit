@@ -443,19 +443,78 @@ All errors inherit from `WebhookKitError` and include machine-readable `code` pr
 | ----------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------- |
 | `SignatureVerificationError`  | `SIGNATURE_VERIFICATION_FAILED` | HMAC digest mismatch or missing signing secret. Check that your webhook signing secret is correct. |
 | `TimestampToleranceError`     | `TIMESTAMP_TOLERANCE_EXCEEDED`  | Payload timestamp exceeds `toleranceSeconds` window. Protects against replay attacks.              |
+| `ReplayAttackError`           | `WEBHOOK_REPLAY_DETECTED`       | Event ID already exists in `store`. Prevents duplicate webhook processing within the TTL window.   |
 | `InvalidSignatureHeaderError` | `INVALID_SIGNATURE_HEADER`      | Header is missing, empty, or lacks required prefix (`sha256=`, `t=...,v1=...`).                    |
 | `PayloadExtractionError`      | `PAYLOAD_EXTRACTION_FAILED`     | Body is an unsupported format or input stream was prematurely closed.                              |
 | `WebhookKitError`             | `WEBHOOK_KIT_ERROR`             | Base class for all webhook-kit errors.                                                             |
 
-### Replay Attack Mitigation
+### Replay Attack Mitigation & Idempotency Store (`WebhookReplayStore`)
 
-Replay attacks occur when an attacker intercepts a valid webhook request and replays it to your server to trigger duplicate actions (such as fulfilling an order twice).
+Replay attacks occur when an attacker (or a retry storm) replays a valid webhook request to your server to trigger duplicate side effects (such as fulfilling an order twice).
 
-`webhook-kit` provides automatic replay protection:
+`webhook-kit` combines two layers of replay protection:
 
-- **Stripe**: Parses the timestamp from `Stripe-Signature` (`t=...`) and validates against `toleranceSeconds` (default: 300s).
-- **Generic**: Automatically inspects `x-webhook-timestamp` (or explicit `timestamp` option) and validates against `toleranceSeconds`.
-- **Clock Drift**: Customize `toleranceSeconds` or pass `currentTimestamp` for deterministic unit testing.
+1. **Timestamp Tolerance**:
+   - **Stripe**: Parses `t=...` from `Stripe-Signature` and validates against `toleranceSeconds` (default: 300s).
+   - **Generic**: Automatically inspects `x-webhook-timestamp` (or explicit `timestamp` option) and validates against `toleranceSeconds`.
+2. **Idempotency / Replay Store (`store: { has(eventId), set(eventId, ttl) }`)**:
+   - Pass any synchronous or asynchronous store implementing `WebhookReplayStore` (`has(eventId)` and `set(eventId, ttlSeconds)`).
+   - `webhook-kit` automatically extracts the event ID from `options.eventId`, standard delivery headers (`X-GitHub-Delivery`, `X-Shopify-Webhook-Id`, `X-Webhook-Id`), or `payload.id` **after** cryptographic HMAC verification succeeds, and rejects duplicates with `ReplayAttackError` (`409 Conflict` in `createWebhookHandler`).
+
+#### Default In-Memory TTL Store (`createInMemoryReplayStore`)
+
+For single-instance Node, Bun, or Deno servers, use the built-in zero-dependency TTL store with automatic expiration and LRU capacity bounding:
+
+```ts
+import {
+  createWebhookHandler,
+  createInMemoryReplayStore,
+} from "@amirabaris/webhook-kit";
+
+const replayStore = createInMemoryReplayStore({
+  maxSize: 10_000,
+  defaultTtlSeconds: 300,
+});
+
+export const POST = createWebhookHandler({
+  provider: "stripe",
+  secret: process.env.STRIPE_WEBHOOK_SECRET!,
+  store: replayStore,
+  onEvent: async (event, { eventId }) => {
+    console.log("Processing unique event:", eventId, event.type);
+  },
+});
+```
+
+#### Distributed Store Hooks (Redis / Upstash / Cloudflare KV)
+
+For multi-instance or serverless edge deployments, wire a 6-line `WebhookReplayStore` adapter into Redis, Upstash, or Cloudflare Workers KV:
+
+```ts
+import type { WebhookReplayStore } from "@amirabaris/webhook-kit";
+
+// 1. Node / Bun Redis (ioredis or node-redis)
+const redisStore: WebhookReplayStore = {
+  has: async (id) => (await redis.exists(`wh:replay:${id}`)) === 1,
+  set: async (id, ttl) => await redis.set(`wh:replay:${id}`, "1", "EX", ttl),
+};
+
+// 2. Upstash Redis (@upstash/redis — Edge & Next.js)
+const upstashStore: WebhookReplayStore = {
+  has: async (id) => (await upstash.exists(`wh:replay:${id}`)) === 1,
+  set: async (id, ttl) =>
+    await upstash.set(`wh:replay:${id}`, "1", { ex: ttl }),
+};
+
+// 3. Cloudflare Workers KV ( passed via Hono / Worker env )
+const createCloudflareKvStore = (kv: KVNamespace): WebhookReplayStore => ({
+  has: async (id) => (await kv.get(`wh:replay:${id}`)) !== null,
+  set: async (id, ttl) =>
+    await kv.put(`wh:replay:${id}`, "1", {
+      expirationTtl: Math.max(60, ttl),
+    }),
+});
+```
 
 ---
 

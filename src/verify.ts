@@ -21,6 +21,7 @@ import type {
   WebhookVerificationResult,
   WebhookVerifyOptions,
 } from "./types.js";
+import { checkAndRecordReplay, resolveWebhookEventId } from "./store.js";
 import { extractRawBody } from "./utils/extract-body.js";
 
 const GENERIC_SIGNATURE_HEADERS = [
@@ -341,6 +342,7 @@ function failVerification(
   error: WebhookKitError,
   throwOnError?: boolean,
   timestamp?: number,
+  eventId?: string,
 ): WebhookVerificationResult<never> {
   if (throwOnError) {
     throw error;
@@ -350,6 +352,7 @@ function failVerification(
     valid: false,
     rawBody,
     timestamp,
+    eventId,
     error,
   };
 }
@@ -375,19 +378,58 @@ function tryParseJson<T>(rawBody: string): T | undefined {
  *
  * @param plugin - Target webhook provider plugin.
  * @param options - Verification options.
+ * @param enforceStoreAfterPlugin - Whether to run replay store enforcement after custom plugin verification.
  * @returns Provider verification result.
  */
 async function runPluginVerification<T>(
   plugin: WebhookProviderPlugin<T, WebhookVerifyOptions>,
   options: WebhookVerifyOptions,
+  enforceStoreAfterPlugin = false,
 ): Promise<WebhookVerificationResult<T>> {
   const result = await plugin.verify(options);
 
-  if (!result.valid && options.throwOnError) {
-    throw result.error;
+  if (!result.valid) {
+    if (options.throwOnError) {
+      throw result.error;
+    }
+
+    return result;
   }
 
-  return result;
+  if (!enforceStoreAfterPlugin) {
+    return result;
+  }
+
+  const eventId =
+    result.eventId ??
+    resolveWebhookEventId({
+      eventId: options.eventId,
+      headers: options.headers,
+      body: options.body,
+      payload: result.payload,
+      rawBody: result.rawBody,
+    });
+  const replayError = await checkAndRecordReplay({
+    store: options.store,
+    eventId,
+    storeTtlSeconds: options.storeTtlSeconds,
+    toleranceSeconds: options.toleranceSeconds,
+  });
+
+  if (replayError) {
+    return failVerification(
+      result.rawBody,
+      replayError,
+      options.throwOnError,
+      result.timestamp,
+      eventId,
+    );
+  }
+
+  return {
+    ...result,
+    eventId,
+  };
 }
 
 /**
@@ -405,6 +447,7 @@ async function delegateToProvider<T>(
     return runPluginVerification(
       provider as WebhookProviderPlugin<T, WebhookVerifyOptions>,
       options,
+      true,
     );
   }
 
@@ -473,11 +516,35 @@ async function verifyGenericWebhook<T>(
 
   const payload =
     options.parseJson !== false ? tryParseJson<T>(rawBody) : undefined;
+  const eventId = resolveWebhookEventId({
+    eventId: options.eventId,
+    headers: options.headers,
+    body: options.body,
+    payload,
+    rawBody,
+  });
+  const replayError = await checkAndRecordReplay({
+    store: options.store,
+    eventId,
+    storeTtlSeconds: options.storeTtlSeconds,
+    toleranceSeconds: options.toleranceSeconds,
+  });
+
+  if (replayError) {
+    return failVerification(
+      rawBody,
+      replayError,
+      options.throwOnError,
+      tsResult.timestamp,
+      eventId,
+    );
+  }
 
   return {
     valid: true,
     rawBody,
     timestamp: tsResult.timestamp,
+    eventId,
     payload: payload as T,
   };
 }

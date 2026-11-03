@@ -65,9 +65,10 @@ export async function POST(req: Request) {
 2. **Web Cryptography API**:
    - Use `globalThis.crypto.subtle.importKey(...)` and `globalThis.crypto.subtle.sign(...)`.
    - Never import `node:crypto` into `src/`.
-3. **Replay Attack Mitigation**:
+3. **Replay Attack Mitigation & Idempotency**:
    - Always enforce a timestamp tolerance check when the webhook provider includes a timestamp header (e.g., Stripe `t=...`).
    - Default tolerance: 300 seconds (5 minutes).
+   - For deduplication across retries, pass `store: createInMemoryReplayStore()` or a `WebhookReplayStore` adapter (`has(eventId)` / `set(eventId, ttl)`) backed by Redis, Upstash, or Cloudflare KV.
 
 ---
 

@@ -9,11 +9,18 @@ import type {
   WebhookProviderPlugin,
   WebhookVerificationResult,
 } from "../types.js";
+import { checkAndRecordReplay, resolveWebhookEventId } from "../store.js";
 import { extractRawBody } from "../utils/extract-body.js";
 import type { ProviderVerifyOptions } from "./types.js";
 
 const BASE64_REGEX =
   /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+const SHOPIFY_EVENT_ID_HEADERS = [
+  "x-shopify-webhook-id",
+  "x-webhook-id",
+  "webhook-id",
+] as const;
 
 /**
  * Standard shape of a Shopify Webhook Event payload.
@@ -196,6 +203,7 @@ function failVerification(
   rawBody: string,
   error: WebhookKitError,
   throwOnError?: boolean,
+  eventId?: string,
 ): WebhookVerificationResult<never> {
   if (throwOnError) {
     throw error;
@@ -204,6 +212,7 @@ function failVerification(
   return {
     valid: false,
     rawBody,
+    eventId,
     error,
   };
 }
@@ -272,10 +281,36 @@ export async function verifyShopifyWebhook<T = ShopifyWebhookEvent>(
 
   const payload =
     options.parseJson !== false ? tryParseJson<T>(rawBody) : undefined;
+  const eventId = resolveWebhookEventId(
+    {
+      eventId: options.eventId,
+      headers: options.headers,
+      body: options.body,
+      payload,
+      rawBody,
+    },
+    SHOPIFY_EVENT_ID_HEADERS,
+  );
+  const replayError = await checkAndRecordReplay({
+    store: options.store,
+    eventId,
+    storeTtlSeconds: options.storeTtlSeconds,
+    toleranceSeconds: options.toleranceSeconds,
+  });
+
+  if (replayError) {
+    return failVerification(
+      rawBody,
+      replayError,
+      options.throwOnError,
+      eventId,
+    );
+  }
 
   return {
     valid: true,
     rawBody,
+    eventId,
     payload: payload as T,
   };
 }

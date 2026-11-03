@@ -9,7 +9,10 @@ This file defines mandatory conventions for humans and AI coding agents contribu
   - `utils/`: Internal and shared utilities (`extractRawBody`).
   - `providers/`: First-party webhook provider adapters (`stripe.ts`, `github.ts`, `shopify.ts`).
   - `verify.ts`: Generic webhook verification (`verifyWebhookSignature`, `assertWebhookSignature`).
-  - `errors.ts`: Structured error hierarchy (`WebhookKitError`, `SignatureVerificationError`, `TimestampToleranceError`, etc.).
+  - `handler.ts`: Universal declarative route handler (`createWebhookHandler`).
+  - `store.ts`: Idempotency and replay store (`InMemoryReplayStore`, `createInMemoryReplayStore`).
+  - `errors.ts`: Structured error hierarchy (`WebhookKitError`, `SignatureVerificationError`, `TimestampToleranceError`, `ReplayAttackError`, etc.).
+
   - `types.ts`: Shared TypeScript contracts.
   - `index.ts`: Public package entrypoint re-exporting public APIs.
 - `bin/`: Zero-dependency CLI binary (`bin/webhook-kit.mjs`).

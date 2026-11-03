@@ -28,6 +28,27 @@ export type SupportedAlgorithm = "SHA-256" | "SHA-384" | "SHA-512" | "SHA-1";
 export type BuiltinProviderName = "stripe" | "github" | "shopify";
 
 /**
+ * Lightweight idempotency / replay store interface (`has(eventId)` / `set(eventId, ttl)`).
+ * Supports both synchronous (in-memory) and asynchronous (Redis, Upstash, Cloudflare KV) implementations.
+ */
+export interface WebhookReplayStore {
+  /**
+   * Returns `true` if `eventId` is already present and unexpired in the store.
+   *
+   * @param eventId - Unique webhook event or delivery identifier.
+   */
+  has(eventId: string): boolean | Promise<boolean>;
+
+  /**
+   * Records `eventId` in the store with the given time-to-live in seconds.
+   *
+   * @param eventId - Unique webhook event or delivery identifier.
+   * @param ttlSeconds - Time-to-live in seconds before the entry expires.
+   */
+  set(eventId: string, ttlSeconds: number): unknown | Promise<unknown>;
+}
+
+/**
  * Options for generic or provider-specific webhook signature verification.
  */
 export interface WebhookVerifyOptions {
@@ -86,6 +107,22 @@ export interface WebhookVerifyOptions {
   currentTimestamp?: number;
 
   /**
+   * Optional idempotency / replay store (`has(eventId)` / `set(eventId, ttl)`) to reject duplicate webhooks.
+   */
+  store?: WebhookReplayStore;
+
+  /**
+   * Optional explicit webhook event ID for idempotency / replay store tracking.
+   * When omitted, `webhook-kit` automatically extracts the delivery ID from headers or payload.
+   */
+  eventId?: string;
+
+  /**
+   * Optional TTL in seconds for entries recorded in `store` (defaults to `toleranceSeconds` or `300`).
+   */
+  storeTtlSeconds?: number;
+
+  /**
    * Whether to automatically parse the verified body as JSON. Defaults to true.
    */
   parseJson?: boolean;
@@ -121,6 +158,11 @@ export interface WebhookVerificationSuccess<T = unknown> {
   timestamp?: number;
 
   /**
+   * Extracted or supplied webhook event ID if resolved.
+   */
+  eventId?: string;
+
+  /**
    * Undefined on successful verification.
    */
   error?: undefined;
@@ -149,6 +191,11 @@ export interface WebhookVerificationFailure {
    * Extracted timestamp if parsed prior to failure.
    */
   timestamp?: number;
+
+  /**
+   * Extracted or supplied webhook event ID if resolved prior to failure.
+   */
+  eventId?: string;
 
   /**
    * Verification error details explaining the failure.
