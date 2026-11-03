@@ -10,8 +10,15 @@ import type {
   WebhookProviderPlugin,
   WebhookVerificationResult,
 } from "../types.js";
+import { checkAndRecordReplay, resolveWebhookEventId } from "../store.js";
 import { extractRawBody } from "../utils/extract-body.js";
 import type { ProviderVerifyOptions } from "./types.js";
+
+const STRIPE_EVENT_ID_HEADERS = [
+  "x-stripe-webhook-id",
+  "x-webhook-id",
+  "webhook-id",
+] as const;
 
 /**
  * Parsed components of a `Stripe-Signature` header.
@@ -433,6 +440,7 @@ function failVerification(
   error: WebhookKitError,
   throwOnError?: boolean,
   timestamp?: number,
+  eventId?: string,
 ): WebhookVerificationResult<never> {
   if (throwOnError) {
     throw error;
@@ -442,6 +450,7 @@ function failVerification(
     valid: false,
     rawBody,
     timestamp,
+    eventId,
     error,
   };
 }
@@ -506,11 +515,38 @@ export async function verifyStripeWebhook<T = StripeWebhookEvent>(
 
   const payload =
     options.parseJson !== false ? tryParseJson<T>(rawBody) : undefined;
+  const eventId = resolveWebhookEventId(
+    {
+      eventId: options.eventId,
+      headers: options.headers,
+      body: options.body,
+      payload,
+      rawBody,
+    },
+    STRIPE_EVENT_ID_HEADERS,
+  );
+  const replayError = await checkAndRecordReplay({
+    store: options.store,
+    eventId,
+    storeTtlSeconds: options.storeTtlSeconds,
+    toleranceSeconds: options.toleranceSeconds,
+  });
+
+  if (replayError) {
+    return failVerification(
+      rawBody,
+      replayError,
+      options.throwOnError,
+      timestamp,
+      eventId,
+    );
+  }
 
   return {
     valid: true,
     rawBody,
     timestamp,
+    eventId,
     payload: payload as T,
   };
 }

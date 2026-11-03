@@ -62,3 +62,20 @@ export class PayloadExtractionError extends WebhookKitError {
     this.name = "PayloadExtractionError";
   }
 }
+
+/**
+ * Thrown or returned when a webhook event ID has already been processed in the replay store.
+ */
+export class ReplayAttackError extends WebhookKitError {
+  public readonly eventId: string;
+
+  constructor(eventId: string, message?: string) {
+    super(
+      message ??
+        `Duplicate webhook event rejected (replay protection): event "${eventId}" was already processed`,
+      "WEBHOOK_REPLAY_DETECTED",
+    );
+    this.name = "ReplayAttackError";
+    this.eventId = eventId;
+  }
+}

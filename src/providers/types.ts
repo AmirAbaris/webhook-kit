@@ -1,4 +1,4 @@
-import type { HeaderRecord, RawBody } from "../types.js";
+import type { HeaderRecord, RawBody, WebhookReplayStore } from "../types.js";
 
 export interface ProviderVerifyOptions {
   /**
@@ -25,6 +25,21 @@ export interface ProviderVerifyOptions {
    * Tolerance in seconds for replay-attack prevention (where supported).
    */
   toleranceSeconds?: number;
+
+  /**
+   * Optional idempotency / replay store (`has(eventId)` / `set(eventId, ttl)`) to reject duplicate webhooks.
+   */
+  store?: WebhookReplayStore;
+
+  /**
+   * Optional explicit webhook event ID for idempotency / replay store tracking.
+   */
+  eventId?: string;
+
+  /**
+   * Optional TTL in seconds for entries recorded in `store` (defaults to `toleranceSeconds` or `300`).
+   */
+  storeTtlSeconds?: number;
 
   /**
    * Whether to automatically parse the verified body as JSON. Defaults to true.

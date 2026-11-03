@@ -1,4 +1,8 @@
-import { PayloadExtractionError, WebhookKitError } from "./errors.js";
+import {
+  PayloadExtractionError,
+  ReplayAttackError,
+  WebhookKitError,
+} from "./errors.js";
 import type { GithubWebhookEvent } from "./providers/github.js";
 import type { ShopifyWebhookEvent } from "./providers/shopify.js";
 import type { StripeWebhookEvent } from "./providers/stripe.js";
@@ -6,6 +10,7 @@ import type {
   BuiltinProviderName,
   SupportedAlgorithm,
   WebhookProviderPlugin,
+  WebhookReplayStore,
   WebhookVerificationSuccess,
 } from "./types.js";
 import { verifyWebhookSignature } from "./verify.js";
@@ -43,6 +48,17 @@ export type SecretResolver<TContext = Request> =
     ) => string | Uint8Array | Promise<string | Uint8Array>);
 
 /**
+ * Static replay store instance or dynamic store resolver function.
+ */
+export type ReplayStoreResolver<TContext = Request> =
+  | WebhookReplayStore
+  | ((
+      context: TContext,
+      request: Request,
+    ) =>
+      WebhookReplayStore | undefined | Promise<WebhookReplayStore | undefined>);
+
+/**
  * Metadata passed as the second argument to `onEvent` alongside the verified payload.
  */
 export interface WebhookEventMeta<TContext = Request> {
@@ -50,6 +66,7 @@ export interface WebhookEventMeta<TContext = Request> {
   readonly request: Request;
   readonly rawBody: string;
   readonly timestamp?: number;
+  readonly eventId?: string;
 }
 
 /**
@@ -60,6 +77,7 @@ export interface WebhookErrorMeta<TContext = Request> {
   readonly request: Request;
   readonly rawBody?: string;
   readonly timestamp?: number;
+  readonly eventId?: string;
 }
 
 /**
@@ -85,6 +103,21 @@ export interface WebhookHandlerOptions<
    * Shared signing secret or dynamic resolver function receiving `(context, request)`.
    */
   secret: SecretResolver<TContext>;
+
+  /**
+   * Optional idempotency / replay store (`has(eventId)` / `set(eventId, ttl)`) or dynamic resolver function.
+   */
+  store?: ReplayStoreResolver<TContext>;
+
+  /**
+   * Optional explicit webhook event ID for idempotency / replay store tracking.
+   */
+  eventId?: string;
+
+  /**
+   * Optional TTL in seconds for entries recorded in `store` (defaults to `toleranceSeconds` or `300`).
+   */
+  storeTtlSeconds?: number;
 
   /**
    * Callback invoked after the webhook signature and timestamp have been verified.
@@ -152,15 +185,33 @@ function createJsonResponse(body: string, status: number): Response {
 }
 
 /**
+ * Resolves the appropriate HTTP status code for a `WebhookKitError`.
+ *
+ * @param error - Verification, replay, or extraction error.
+ * @returns `400` for extraction errors, `409` for duplicate event replays, or `401` for verification errors.
+ */
+function resolveErrorStatus(error: WebhookKitError): number {
+  if (error instanceof PayloadExtractionError) {
+    return 400;
+  }
+
+  if (error instanceof ReplayAttackError) {
+    return 409;
+  }
+
+  return 401;
+}
+
+/**
  * Converts a `WebhookKitError` into a structured JSON HTTP error `Response`.
  *
  * @param error - Verification or extraction error.
- * @returns `400` response for payload extraction errors, or `401` for verification errors.
+ * @returns `400`, `409`, or `401` JSON error response.
  */
 function createErrorResponse(error: WebhookKitError): Response {
-  // WHY: Map stream/body extraction failures to 400 Bad Request, while all
-  // cryptographic or header verification failures return 401 Unauthorized.
-  const status = error instanceof PayloadExtractionError ? 400 : 401;
+  // WHY: Map stream/body extraction failures to 400 Bad Request, duplicate replay
+  // detections to 409 Conflict, and cryptographic/header failures to 401 Unauthorized.
+  const status = resolveErrorStatus(error);
 
   return createJsonResponse(
     JSON.stringify({
@@ -234,6 +285,26 @@ async function resolveSecret<TContext extends WebhookRequestInput>(
 }
 
 /**
+ * Resolves the replay store from a static store object or dynamic resolver function.
+ *
+ * @param store - Static replay store or resolver function.
+ * @param context - Original handler input (`Request` or framework context).
+ * @param request - Unwrapped Web Standard `Request`.
+ * @returns Resolved `WebhookReplayStore` or `undefined`.
+ */
+async function resolveStore<TContext extends WebhookRequestInput>(
+  store: ReplayStoreResolver<TContext> | undefined,
+  context: TContext,
+  request: Request,
+): Promise<WebhookReplayStore | undefined> {
+  if (typeof store === "function") {
+    return store(context, request);
+  }
+
+  return store;
+}
+
+/**
  * Converts the return value of `onEvent` into a Web Standard `Response`.
  *
  * @param output - Return value from `onEvent`.
@@ -290,10 +361,12 @@ async function verifyRequest<TPayload, TContext extends WebhookRequestInput>(
       error: WebhookKitError;
       rawBody?: string;
       timestamp?: number;
+      eventId?: string;
     }
 > {
   try {
     const secret = await resolveSecret(options.secret, context, request);
+    const store = await resolveStore(options.store, context, request);
     const result = await verifyWebhookSignature<TPayload>({
       body: request,
       secret,
@@ -302,6 +375,9 @@ async function verifyRequest<TPayload, TContext extends WebhookRequestInput>(
       encoding: options.encoding,
       toleranceSeconds: options.toleranceSeconds,
       currentTimestamp: options.currentTimestamp,
+      store,
+      eventId: options.eventId,
+      storeTtlSeconds: options.storeTtlSeconds,
       parseJson: options.parseJson,
     });
 
@@ -311,6 +387,7 @@ async function verifyRequest<TPayload, TContext extends WebhookRequestInput>(
         error: result.error,
         rawBody: result.rawBody,
         timestamp: result.timestamp,
+        eventId: result.eventId,
       };
     }
 
@@ -410,6 +487,7 @@ export function createWebhookHandler<
           request,
           rawBody: outcome.rawBody,
           timestamp: outcome.timestamp,
+          eventId: outcome.eventId,
         },
         options.onError,
       );
@@ -422,6 +500,7 @@ export function createWebhookHandler<
       request,
       rawBody: outcome.result.rawBody,
       timestamp: outcome.result.timestamp,
+      eventId: outcome.result.eventId,
     });
 
     return formatSuccessResponse(output);
