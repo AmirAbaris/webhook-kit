@@ -141,6 +141,51 @@ try {
   );
   execSync("node test-import.mjs", { cwd: tempDir, stdio: "inherit" });
 
+  // 6.2 Test CJS require in isolated sandbox
+  console.log("🔬 Step 6.2: Verifying CommonJS package require...");
+  const testCjsConsumerScript = `
+    const {
+      verifyWebhookSignature,
+      assertWebhookSignature,
+      createWebhookHandler,
+      createInMemoryReplayStore,
+      InMemoryReplayStore,
+      WebhookKitError,
+      SignatureVerificationError,
+      ReplayAttackError
+    } = require('@amirabaris/webhook-kit');
+
+    if (typeof verifyWebhookSignature !== 'function') {
+      throw new Error('CJS: verifyWebhookSignature is not exported as a function');
+    }
+    if (typeof assertWebhookSignature !== 'function') {
+      throw new Error('CJS: assertWebhookSignature is not exported as a function');
+    }
+    if (typeof createWebhookHandler !== 'function') {
+      throw new Error('CJS: createWebhookHandler is not exported as a function');
+    }
+    if (typeof createInMemoryReplayStore !== 'function') {
+      throw new Error('CJS: createInMemoryReplayStore is not exported as a function');
+    }
+    if (typeof InMemoryReplayStore !== 'function') {
+      throw new Error('CJS: InMemoryReplayStore is not exported');
+    }
+    if (typeof ReplayAttackError !== 'function') {
+      throw new Error('CJS: ReplayAttackError is not exported');
+    }
+    if (typeof WebhookKitError !== 'function') {
+      throw new Error('CJS: WebhookKitError is not exported');
+    }
+    console.log('✓ CommonJS exports loaded successfully');
+  `;
+
+  fs.writeFileSync(
+    path.join(tempDir, "test-import.cjs"),
+    testCjsConsumerScript,
+    "utf8",
+  );
+  execSync("node test-import.cjs", { cwd: tempDir, stdio: "inherit" });
+
   // 7. Test CLI binary in sandbox
   console.log("⚙️ Step 7: Verifying CLI binary execution...");
   const cliOutput = execSync("npx webhook-kit --version", {

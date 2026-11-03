@@ -28,7 +28,7 @@
   "author": "Amir Abaris",
   "type": "module",
   "sideEffects": false,
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "bin": {
@@ -36,9 +36,13 @@
   },
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": {
+        "import": "./dist/index.d.mts",
+        "require": "./dist/index.d.cts",
+        "default": "./dist/index.d.ts"
+      },
       "import": "./dist/index.mjs",
-      "require": "./dist/index.js",
+      "require": "./dist/index.cjs",
       "default": "./dist/index.mjs"
     },
     "./package.json": "./package.json"
