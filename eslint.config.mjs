@@ -10,6 +10,7 @@ export default [
       "coverage/**",
       ".agents/**",
       ".gemini/**",
+      "apps/**",
     ],
   },
   {
