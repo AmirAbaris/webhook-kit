@@ -30,6 +30,11 @@ import {
   getCachedCryptoKey,
   clearCryptoKeyCache,
   getCryptoKeyCacheSize,
+  createWebhookHandler,
+  type UniversalWebhookHandler,
+  type WebhookLikeContext,
+  type WebhookEventMeta,
+  type WebhookErrorMeta,
 } from "../src/index.js";
 
 interface SampleStripePayload {
@@ -334,3 +339,104 @@ expectType<number>(customCache.capacity);
 expectType<boolean>(customCache.has("key"));
 expectType<boolean>(customCache.delete("key"));
 customCache.clear();
+
+const nextStripeHandler = createWebhookHandler({
+  provider: "stripe",
+  secret: "whsec_test",
+  onEvent: async (event, meta) => {
+    expectType<StripeWebhookEvent>(event);
+    expectType<WebhookEventMeta<Request>>(meta);
+    expectType<Request>(meta.context);
+    expectType<Request>(meta.request);
+    expectType<string>(meta.rawBody);
+    expectType<number | undefined>(meta.timestamp);
+  },
+  onError: (error, meta) => {
+    expectType<WebhookKitError>(error);
+    expectType<WebhookErrorMeta<Request>>(meta);
+
+    return new Response("Unauthorized", { status: 401 });
+  },
+});
+expectType<UniversalWebhookHandler<Request>>(nextStripeHandler);
+
+const nextCustomStripeHandler = createWebhookHandler<SampleStripePayload>({
+  provider: "stripe",
+  secret: "whsec_test",
+  onEvent: (event) => {
+    expectType<SampleStripePayload>(event);
+
+    return { received: true };
+  },
+});
+expectType<UniversalWebhookHandler<Request>>(nextCustomStripeHandler);
+
+const nextGithubHandler = createWebhookHandler({
+  provider: "github",
+  secret: "gh_secret",
+  onEvent: (event) => {
+    expectType<GithubWebhookEvent>(event);
+  },
+});
+expectType<UniversalWebhookHandler<Request>>(nextGithubHandler);
+
+const nextShopifyHandler = createWebhookHandler({
+  provider: "shopify",
+  secret: "shpss_secret",
+  onEvent: (event) => {
+    expectType<ShopifyWebhookEvent>(event);
+  },
+});
+expectType<UniversalWebhookHandler<Request>>(nextShopifyHandler);
+
+const nextPluginHandler = createWebhookHandler({
+  provider: customPlugin,
+  secret: "custom_secret",
+  onEvent: (event) => {
+    expectType<SampleShopifyPayload>(event);
+  },
+});
+expectType<UniversalWebhookHandler<Request>>(nextPluginHandler);
+
+const nextGenericHandler = createWebhookHandler({
+  secret: "generic_secret",
+  onEvent: (event) => {
+    expectType<unknown>(event);
+  },
+});
+expectType<UniversalWebhookHandler<Request>>(nextGenericHandler);
+
+interface SampleHonoContext extends WebhookLikeContext {
+  readonly env: {
+    readonly GITHUB_SECRET: string;
+    readonly STRIPE_SECRET: string;
+  };
+}
+
+const honoGithubHandler = createWebhookHandler({
+  provider: "github",
+  secret: (c: SampleHonoContext) => c.env.GITHUB_SECRET,
+  onEvent: async (event, { context, request }) => {
+    expectType<GithubWebhookEvent>(event);
+    expectType<SampleHonoContext>(context);
+    expectType<Request>(request);
+  },
+});
+expectType<UniversalWebhookHandler<SampleHonoContext>>(honoGithubHandler);
+
+declare function registerHonoRoute(
+  path: string,
+  handler: (c: SampleHonoContext) => Promise<Response>,
+): void;
+
+registerHonoRoute(
+  "/api/webhook",
+  createWebhookHandler({
+    provider: "stripe",
+    secret: (c) => c.env.STRIPE_SECRET,
+    onEvent: async (event, { context }) => {
+      expectType<StripeWebhookEvent>(event);
+      expectType<SampleHonoContext>(context);
+    },
+  }),
+);

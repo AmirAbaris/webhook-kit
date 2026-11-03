@@ -75,49 +75,45 @@ export async function POST(req: Request) {
 
 ### Next.js App Router (`app/api/webhook/route.ts`)
 
+Prefer `createWebhookHandler` for zero-boilerplate route handlers, or pass the Web Standard `Request` directly to `verifyWebhookSignature`:
+
 ```ts
-import { verifyWebhookSignature } from "webhook-kit";
+import { createWebhookHandler } from "@amirabaris/webhook-kit";
 
-export async function POST(req: Request) {
-  const signature = req.headers.get("x-signature") ?? "";
-  const result = await verifyWebhookSignature({
-    body: req, // Web Standard Request can be passed directly!
-    signature,
-    secret: process.env.WEBHOOK_SECRET!,
-  });
-
-  if (!result.valid) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-
-  return Response.json({ received: true });
-}
+export const POST = createWebhookHandler({
+  provider: "stripe",
+  secret: process.env.STRIPE_WEBHOOK_SECRET!,
+  onEvent: async (event) => {
+    // event is strongly typed StripeWebhookEvent
+    console.log("Verified Stripe event:", event.id);
+  },
+});
 ```
 
 ### Hono (Edge / Node / Bun / Cloudflare)
 
+`createWebhookHandler` unwraps Hono's `Context` (`c.req.raw`) and resolves secrets from `c.env`:
+
 ```ts
 import { Hono } from "hono";
-import { verifyWebhookSignature } from "@amirabaris/webhook-kit";
+import { createWebhookHandler } from "@amirabaris/webhook-kit";
 
-const app = new Hono();
+type Bindings = {
+  GITHUB_WEBHOOK_SECRET: string;
+};
 
-app.post("/webhook", async (c) => {
-  const rawBody = await c.req.text();
-  const signature = c.req.header("x-signature") ?? "";
+const app = new Hono<{ Bindings: Bindings }>();
 
-  const result = await verifyWebhookSignature({
-    body: rawBody,
-    signature,
-    secret: process.env.WEBHOOK_SECRET!,
-  });
-
-  if (!result.valid) {
-    return c.text("Unauthorized", 401);
-  }
-
-  return c.json({ success: true });
-});
+app.post(
+  "/webhook",
+  createWebhookHandler({
+    provider: "github",
+    secret: (c) => c.env.GITHUB_WEBHOOK_SECRET,
+    onEvent: async (event) => {
+      console.log("Verified GitHub action:", event.action);
+    },
+  }),
+);
 ```
 
 ---
