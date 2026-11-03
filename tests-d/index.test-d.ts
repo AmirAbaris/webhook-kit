@@ -35,6 +35,11 @@ import {
   type WebhookLikeContext,
   type WebhookEventMeta,
   type WebhookErrorMeta,
+  InMemoryReplayStore,
+  createInMemoryReplayStore,
+  ReplayAttackError,
+  type WebhookReplayStore,
+  type InMemoryReplayStoreOptions,
 } from "../src/index.js";
 
 interface SampleStripePayload {
@@ -440,3 +445,55 @@ registerHonoRoute(
     },
   }),
 );
+
+// 10. Verify WebhookReplayStore and InMemoryReplayStore types
+const memoryStore = createInMemoryReplayStore({
+  maxSize: 5000,
+  defaultTtlSeconds: 300,
+});
+expectType<InMemoryReplayStore>(memoryStore);
+expectAssignable<WebhookReplayStore>(memoryStore);
+expectType<boolean>(memoryStore.has("evt_1"));
+expectType<void>(memoryStore.set("evt_1", 300));
+expectType<number>(memoryStore.prune());
+
+expectAssignable<InMemoryReplayStoreOptions>({
+  maxSize: 1000,
+  defaultTtlSeconds: 60,
+  now: () => Date.now(),
+});
+
+const customAsyncStore: WebhookReplayStore = {
+  async has(eventId: string) {
+    return eventId.length > 0;
+  },
+  async set(_eventId: string, _ttl: number) {
+    return "OK";
+  },
+};
+expectAssignable<WebhookReplayStore>(customAsyncStore);
+
+const replayErr = new ReplayAttackError("evt_dup");
+expectType<string>(replayErr.eventId);
+expectAssignable<WebhookKitError>(replayErr);
+
+const verifiedWithStore = await verifyWebhookSignature({
+  provider: "stripe",
+  body: '{"id":"evt_1"}',
+  secret: "whsec_test",
+  store: customAsyncStore,
+  eventId: "evt_1",
+  storeTtlSeconds: 300,
+});
+expectType<string | undefined>(verifiedWithStore.eventId);
+
+const handlerWithStore = createWebhookHandler({
+  provider: "stripe",
+  secret: "whsec_test",
+  store: memoryStore,
+  storeTtlSeconds: 600,
+  onEvent: (_event, meta) => {
+    expectType<string | undefined>(meta.eventId);
+  },
+});
+expectType<UniversalWebhookHandler<Request>>(handlerWithStore);

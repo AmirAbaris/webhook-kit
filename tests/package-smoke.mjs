@@ -103,8 +103,11 @@ try {
       verifyWebhookSignature,
       assertWebhookSignature,
       createWebhookHandler,
+      createInMemoryReplayStore,
+      InMemoryReplayStore,
       WebhookKitError,
-      SignatureVerificationError
+      SignatureVerificationError,
+      ReplayAttackError
     } from '@amirabaris/webhook-kit';
 
     if (typeof verifyWebhookSignature !== 'function') {
@@ -115,6 +118,15 @@ try {
     }
     if (typeof createWebhookHandler !== 'function') {
       throw new Error('createWebhookHandler is not exported as a function');
+    }
+    if (typeof createInMemoryReplayStore !== 'function') {
+      throw new Error('createInMemoryReplayStore is not exported as a function');
+    }
+    if (typeof InMemoryReplayStore !== 'function') {
+      throw new Error('InMemoryReplayStore is not exported');
+    }
+    if (typeof ReplayAttackError !== 'function') {
+      throw new Error('ReplayAttackError is not exported');
     }
     if (typeof WebhookKitError !== 'function') {
       throw new Error('WebhookKitError is not exported');
