@@ -16,6 +16,207 @@ export interface SubtleHmacOptions {
    * Output encoding format. Defaults to `'uint8array'`.
    */
   encoding?: SubtleHmacEncoding;
+
+  /**
+   * Whether to bypass the in-memory CryptoKey cache. Defaults to `false`.
+   */
+  bypassCache?: boolean;
+}
+
+/**
+ * Lightweight LRU (Least Recently Used) cache backed by a JavaScript `Map`.
+ * Reuses compiled WebCrypto keys across concurrent requests and evicts the
+ * oldest entries when capacity is reached.
+ */
+export class CryptoKeyLruCache {
+  private readonly maxSize: number;
+
+  private readonly map = new Map<string, Promise<CryptoKey>>();
+
+  constructor(maxSize = 256) {
+    this.maxSize = maxSize;
+  }
+
+  get(key: string): Promise<CryptoKey> | undefined {
+    const item = this.map.get(key);
+
+    if (!item) {
+      return undefined;
+    }
+
+    // Refresh LRU order: delete and re-insert to mark as most recently used
+    this.map.delete(key);
+    this.map.set(key, item);
+
+    return item;
+  }
+
+  set(key: string, value: Promise<CryptoKey>): void {
+    if (this.map.has(key)) {
+      this.map.delete(key);
+    } else if (this.map.size >= this.maxSize) {
+      const oldestKey = this.map.keys().next().value;
+
+      if (oldestKey !== undefined) {
+        this.map.delete(oldestKey);
+      }
+    }
+
+    this.map.set(key, value);
+  }
+
+  has(key: string): boolean {
+    return this.map.has(key);
+  }
+
+  delete(key: string): boolean {
+    return this.map.delete(key);
+  }
+
+  clear(): void {
+    this.map.clear();
+  }
+
+  get size(): number {
+    return this.map.size;
+  }
+
+  get capacity(): number {
+    return this.maxSize;
+  }
+}
+
+/**
+ * Global in-memory LRU cache holding compiled WebCrypto HMAC keys.
+ */
+const defaultCryptoKeyCache = new CryptoKeyLruCache(256);
+
+/**
+ * Computes a fast 128-bit composite hash of secret bytes for safe cache key generation
+ * without retaining raw secret strings or byte sequences in cache keys.
+ *
+ * @param bytes Raw secret bytes.
+ * @returns Hex-encoded composite hash with length prefix.
+ */
+function hashSecret(bytes: Uint8Array): string {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x27d4eb2f;
+  let h3 = 0x9e3779b9;
+  let h4 = 0x45670123;
+  const len = bytes.length;
+
+  for (let i = 0; i < len; i++) {
+    const b = bytes[i]!;
+    h1 = Math.imul(h1 ^ b, 0x01000193);
+    h2 = Math.imul(h2 ^ (b + i), 0x5bd1e995);
+    h3 = Math.imul(h3 ^ ((b << 4) | (b >>> 4)), 0x1b873593);
+    h4 = Math.imul(h4 ^ (b * 31), 0xcc9e2d51);
+  }
+
+  return `${len}_${(h1 >>> 0).toString(16)}_${(h2 >>> 0).toString(16)}_${(h3 >>> 0).toString(16)}_${(h4 >>> 0).toString(16)}`;
+}
+
+/**
+ * Generates an in-memory cache key composed of the normalized algorithm and secret hash.
+ *
+ * @param normalizedHash Normalized hash algorithm (e.g. `'SHA-256'`).
+ * @param secretBytes Raw secret bytes.
+ * @returns Formatted cache key string.
+ */
+function getSecretCacheKey(
+  normalizedHash: string,
+  secretBytes: Uint8Array,
+): string {
+  return `${normalizedHash}:${hashSecret(secretBytes)}`;
+}
+
+/**
+ * Invokes `crypto.subtle.importKey` for an HMAC signing key.
+ */
+function importHmacKey(
+  subtle: SubtleCrypto,
+  normalizedHash: string,
+  secretBytes: Uint8Array<ArrayBuffer>,
+): Promise<CryptoKey> {
+  return subtle.importKey(
+    "raw",
+    secretBytes,
+    {
+      name: "HMAC",
+      hash: { name: normalizedHash },
+    },
+    false,
+    ["sign"],
+  );
+}
+
+/**
+ * Resolves a compiled `CryptoKey` from cache or initiates and caches a new one.
+ */
+function getOrCreateCryptoKey(
+  subtle: SubtleCrypto,
+  normalizedHash: string,
+  secretBytes: Uint8Array<ArrayBuffer>,
+  cache: CryptoKeyLruCache = defaultCryptoKeyCache,
+): Promise<CryptoKey> {
+  const cacheKey = getSecretCacheKey(normalizedHash, secretBytes);
+  const cachedPromise = cache.get(cacheKey);
+
+  if (cachedPromise) {
+    return cachedPromise;
+  }
+
+  const keyPromise = importHmacKey(subtle, normalizedHash, secretBytes);
+
+  // Evict immediately on error to avoid caching rejected promises
+  keyPromise.catch(() => {
+    cache.delete(cacheKey);
+  });
+
+  cache.set(cacheKey, keyPromise);
+
+  return keyPromise;
+}
+
+/**
+ * Clears all compiled WebCrypto HMAC keys from the global key cache.
+ */
+export function clearCryptoKeyCache(): void {
+  defaultCryptoKeyCache.clear();
+}
+
+/**
+ * Returns the current number of compiled WebCrypto HMAC keys stored in the global key cache.
+ */
+export function getCryptoKeyCacheSize(): number {
+  return defaultCryptoKeyCache.size;
+}
+
+/**
+ * Retrieves a cached WebCrypto HMAC key or compiles and caches a new one.
+ *
+ * @param algorithm HMAC digest algorithm (e.g. `'SHA-256'`).
+ * @param secret Raw secret string or byte array.
+ * @param cache Optional custom `CryptoKeyLruCache` instance.
+ * @returns Compiled `CryptoKey` instance.
+ */
+export async function getCachedCryptoKey(
+  algorithm: string,
+  secret: string | Uint8Array,
+  cache: CryptoKeyLruCache = defaultCryptoKeyCache,
+): Promise<CryptoKey> {
+  const subtle = globalThis.crypto?.subtle;
+
+  if (!subtle) {
+    throw new Error(
+      "Web Cryptography API (crypto.subtle) is not available in the current runtime environment.",
+    );
+  }
+
+  const normalizedHash = normalizeHashAlgorithm(algorithm);
+  const secretBytes = toUint8Array(secret);
+
+  return getOrCreateCryptoKey(subtle, normalizedHash, secretBytes, cache);
 }
 
 /**
@@ -90,6 +291,56 @@ export function timingSafeEqual(
 }
 
 /**
+ * Formats a raw HMAC digest according to the requested encoding.
+ */
+function formatHmacDigest(
+  bytes: Uint8Array,
+  encoding?: SubtleHmacEncoding,
+): Uint8Array | string {
+  if (encoding === "hex") {
+    return bytesToHex(bytes);
+  }
+
+  if (encoding === "base64") {
+    return bytesToBase64(bytes);
+  }
+
+  return bytes;
+}
+
+/**
+ * Normalizes options and extract encoding and cache preferences.
+ */
+function extractHmacOptions(
+  encodingOrOptions?: SubtleHmacEncoding | SubtleHmacOptions,
+): { encoding?: SubtleHmacEncoding; bypassCache: boolean } {
+  if (typeof encodingOrOptions === "string") {
+    return { encoding: encodingOrOptions, bypassCache: false };
+  }
+
+  return {
+    encoding: encodingOrOptions?.encoding,
+    bypassCache: Boolean(encodingOrOptions?.bypassCache),
+  };
+}
+
+/**
+ * Obtains a `CryptoKey` either by bypassing or utilizing the LRU cache.
+ */
+function resolveSubtleHmacKey(
+  subtle: SubtleCrypto,
+  normalizedHash: string,
+  secretBytes: Uint8Array<ArrayBuffer>,
+  bypassCache: boolean,
+): Promise<CryptoKey> {
+  if (bypassCache) {
+    return importHmacKey(subtle, normalizedHash, secretBytes);
+  }
+
+  return getOrCreateCryptoKey(subtle, normalizedHash, secretBytes);
+}
+
+/**
  * Computes an HMAC digest using `crypto.subtle` across modern JavaScript runtimes.
  *
  * @param algorithm HMAC digest algorithm (`'SHA-256'`, `'SHA-384'`, `'SHA-512'`, `'SHA-1'`).
@@ -103,14 +354,17 @@ export async function computeSubtleHmac(
   secret: string | Uint8Array,
   data: string | Uint8Array,
   encodingOrOptions?:
-    "uint8array" | "binary" | { encoding?: "uint8array" | "binary" },
+    | "uint8array"
+    | "binary"
+    | { encoding?: "uint8array" | "binary"; bypassCache?: boolean },
 ): Promise<Uint8Array>;
 
 export async function computeSubtleHmac(
   algorithm: string,
   secret: string | Uint8Array,
   data: string | Uint8Array,
-  encodingOrOptions: "hex" | "base64" | { encoding: "hex" | "base64" },
+  encodingOrOptions:
+    "hex" | "base64" | { encoding: "hex" | "base64"; bypassCache?: boolean },
 ): Promise<string>;
 
 export async function computeSubtleHmac(
@@ -120,6 +374,7 @@ export async function computeSubtleHmac(
   encodingOrOptions?: SubtleHmacEncoding | SubtleHmacOptions,
 ): Promise<Uint8Array | string> {
   const subtle = globalThis.crypto?.subtle;
+
   if (!subtle) {
     throw new Error(
       "Web Cryptography API (crypto.subtle) is not available in the current runtime environment.",
@@ -129,33 +384,18 @@ export async function computeSubtleHmac(
   const normalizedHash = normalizeHashAlgorithm(algorithm);
   const secretBytes = toUint8Array(secret);
   const dataBytes = toUint8Array(data);
+  const { encoding, bypassCache } = extractHmacOptions(encodingOrOptions);
 
-  const key = await subtle.importKey(
-    "raw",
+  const key = await resolveSubtleHmacKey(
+    subtle,
+    normalizedHash,
     secretBytes,
-    {
-      name: "HMAC",
-      hash: { name: normalizedHash },
-    },
-    false,
-    ["sign"],
+    bypassCache,
   );
 
   const signatureBuffer = await subtle.sign("HMAC", key, dataBytes);
-  const signatureBytes = new Uint8Array(signatureBuffer);
 
-  const encoding =
-    typeof encodingOrOptions === "string"
-      ? encodingOrOptions
-      : encodingOrOptions?.encoding;
-
-  if (encoding === "hex") {
-    return bytesToHex(signatureBytes);
-  }
-  if (encoding === "base64") {
-    return bytesToBase64(signatureBytes);
-  }
-  return signatureBytes;
+  return formatHmacDigest(new Uint8Array(signatureBuffer), encoding);
 }
 
 /**
