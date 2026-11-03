@@ -1,19 +1,29 @@
-import { Button } from "@/components/ui/button"
+import { AgentSection } from "@/components/landing-page/agent-section"
+import { FeaturesSection } from "@/components/landing-page/features-section"
+import { HeroSection } from "@/components/landing-page/hero-section"
+import { InstallSection } from "@/components/landing-page/install-section"
+import { PitfallSection } from "@/components/landing-page/pitfall-section"
+import { PlaygroundSection } from "@/components/landing-page/playground-section"
+import { RecipesSection } from "@/components/landing-page/recipes-section"
+import { RuntimesSection } from "@/components/landing-page/runtimes-section"
+import { SiteFooter } from "@/components/landing-page/site-footer"
+import { SiteHeader } from "@/components/landing-page/site-header"
 
-export default function Page() {
+export default function HomePage() {
   return (
-    <div className="flex min-h-svh p-6">
-      <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
-        <div>
-          <h1 className="font-medium">Project ready!</h1>
-          <p>You may now add components and start building.</p>
-          <p>We&apos;ve already added the button component for you.</p>
-          <Button className="mt-2">Button</Button>
-        </div>
-        <div className="font-mono text-xs text-muted-foreground">
-          (Press <kbd>d</kbd> to toggle dark mode)
-        </div>
-      </div>
+    <div className="flex min-h-svh flex-col">
+      <SiteHeader />
+      <main className="flex-1">
+        <HeroSection />
+        <PitfallSection />
+        <PlaygroundSection />
+        <InstallSection />
+        <FeaturesSection />
+        <RecipesSection />
+        <RuntimesSection />
+        <AgentSection />
+      </main>
+      <SiteFooter />
     </div>
   )
 }

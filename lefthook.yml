@@ -7,6 +7,9 @@ pre-commit:
     - name: prettier
       run: pnpm exec prettier --write {staged_files}
       glob: "*.{js,mjs,cjs,ts,mts,cts,json,md,yml,yaml}"
+      exclude:
+        - "apps/**"
+        - "pnpm-lock.yaml"
       stage_fixed: true
     - name: oxlint
       run: pnpm exec oxlint --fix {staged_files}

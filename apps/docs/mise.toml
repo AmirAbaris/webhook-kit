@@ -1,0 +1,17 @@
+###############################################
+# Runtime/tooling configuration for this repo #
+# Used by: https://mise.jdx.dev/              #
+###############################################
+
+# Tool versions to match local dev and CI
+[tools]
+node = "22"
+pnpm = "9.15.9"
+
+[tasks.dev]
+description = "Run dev server"
+run = "pnpm dev"
+
+[tasks.build]
+description = "Build docs site"
+run = "pnpm build"
