@@ -8,7 +8,13 @@
     "browser": true,
     "node": true
   },
-  "ignorePatterns": ["dist/*", "node_modules/*", ".pnpm-store/*", "coverage/*"],
+  "ignorePatterns": [
+    "dist/*",
+    "node_modules/*",
+    ".pnpm-store/*",
+    "coverage/*",
+    "apps/*"
+  ],
   "rules": {
     "complexity": ["error", { "max": 7 }],
     "no-undef": "warn",

@@ -11,8 +11,10 @@ pre-commit:
     - name: oxlint
       run: pnpm exec oxlint --fix {staged_files}
       glob: "*.{js,mjs,cjs,ts,mts,cts}"
+      exclude: "apps/**"
       stage_fixed: true
     - name: eslint
       run: pnpm exec eslint --fix {staged_files}
       glob: "*.{ts,mts}"
+      exclude: "apps/**"
       stage_fixed: true

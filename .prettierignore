@@ -5,3 +5,4 @@ dist
 .gemini
 coverage
 *.log
+apps
