@@ -87,9 +87,26 @@ yarn add @amirabaris/webhook-kit
 
 ## Quick Start
 
-### Unified Verification (Stripe, GitHub, Shopify, Generic)
+### 3-Line Route Handler (`createWebhookHandler`)
 
-`webhook-kit` provides a single unified entry point `verifyWebhookSignature` (and `assertWebhookSignature`) that works seamlessly across providers and runtimes:
+Drop `createWebhookHandler` directly into **Next.js App Router** (`Request`) or **Hono** (`Context`) routes. It automatically clones the raw request stream, verifies the cryptographic signature, and dispatches the strongly typed event payload:
+
+```ts
+// app/api/webhook/route.ts (Next.js App Router)
+import { createWebhookHandler } from "@amirabaris/webhook-kit";
+
+export const POST = createWebhookHandler({
+  provider: "stripe",
+  secret: process.env.STRIPE_WEBHOOK_SECRET!,
+  onEvent: async (event) => {
+    console.log("Verified Stripe event:", event.type, event.id);
+  },
+});
+```
+
+### Unified Verification (`verifyWebhookSignature` & `assertWebhookSignature`)
+
+For custom control flow, `webhook-kit` also provides `verifyWebhookSignature` and `assertWebhookSignature` across providers and runtimes:
 
 ```ts
 import {
@@ -127,7 +144,28 @@ const payload = await assertWebhookSignature({
 
 ### Next.js App Router (`app/api/webhook/route.ts`)
 
-Next.js App Router route handlers receive standard Web `Request` objects. Pass `req` directly to `webhook-kit` without calling `await req.json()` first:
+Export `createWebhookHandler` directly as your `POST` route handler, or pass the Web Standard `Request` to `verifyWebhookSignature` without calling `await req.json()` first:
+
+```ts
+// app/api/webhook/route.ts — 3-line declarative route handler
+import { createWebhookHandler } from "@amirabaris/webhook-kit";
+
+export const POST = createWebhookHandler({
+  provider: "stripe",
+  secret: process.env.STRIPE_WEBHOOK_SECRET!,
+  onEvent: async (event) => {
+    switch (event.type) {
+      case "checkout.session.completed":
+        // Handle business logic safely with typed StripeWebhookEvent
+        break;
+      default:
+        console.log(`Unhandled event type: ${event.type}`);
+    }
+  },
+});
+```
+
+Or using `verifyWebhookSignature` directly:
 
 ```ts
 // app/api/webhook/route.ts
@@ -155,14 +193,6 @@ export async function POST(req: Request) {
   const event = result.payload;
   console.log("Received Stripe event:", event.type, event.id);
 
-  switch (event.type) {
-    case "checkout.session.completed":
-      // Handle business logic safely
-      break;
-    default:
-      console.log(`Unhandled event type: ${event.type}`);
-  }
-
   return NextResponse.json({ received: true });
 }
 ```
@@ -173,12 +203,12 @@ export async function POST(req: Request) {
 
 #### Hono
 
-In Hono, `c.req.raw` exposes the underlying Web Standard `Request`:
+`createWebhookHandler` natively unwraps Hono's `Context` (`c.req.raw`) and supports dynamic secret resolution from `c.env`:
 
 ```ts
 // src/index.ts
 import { Hono } from "hono";
-import { verifyWebhookSignature } from "@amirabaris/webhook-kit";
+import { createWebhookHandler } from "@amirabaris/webhook-kit";
 
 type Bindings = {
   GITHUB_WEBHOOK_SECRET: string;
@@ -186,24 +216,17 @@ type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-app.post("/api/webhook", async (c) => {
-  // c.req.raw is the native Web Standard Request object
-  const result = await verifyWebhookSignature({
-    body: c.req.raw,
-    secret: c.env.GITHUB_WEBHOOK_SECRET,
-    provider: "github", // Automatically extracts and validates X-Hub-Signature-256
-  });
-
-  if (!result.valid) {
-    return c.text(`Unauthorized: ${result.error.message}`, 401);
-  }
-
-  // result.payload is strongly typed GithubWebhookEvent
-  const event = result.payload;
-  console.log("GitHub event:", event.action);
-
-  return c.json({ received: true });
-});
+app.post(
+  "/api/webhook",
+  createWebhookHandler({
+    provider: "github",
+    secret: (c) => c.env.GITHUB_WEBHOOK_SECRET,
+    onEvent: async (event) => {
+      // event is strongly typed GithubWebhookEvent
+      console.log("GitHub event:", event.action);
+    },
+  }),
+);
 
 export default app;
 ```
