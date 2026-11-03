@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     label: "Safe: Direct Web Standard Request verification",
     filename: "app/api/webhook/route.ts",
     badge: "Byte-Preserving & Constant-Time",
-    code: `import { verifyWebhookSignature } from "webhook-kit"
+    code: `import { verifyWebhookSignature } from "@amirabaris/webhook-kit"
 
 export async function POST(req: Request) {
   const result = await verifyWebhookSignature({
