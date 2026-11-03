@@ -7,6 +7,7 @@ import { RecipesSection } from "@/components/landing-page/recipes-section"
 import { RuntimesSection } from "@/components/landing-page/runtimes-section"
 import { SiteFooter } from "@/components/landing-page/site-footer"
 import { SiteHeader } from "@/components/landing-page/site-header"
+import { StoreSection } from "@/components/landing-page/store-section"
 
 export default function HomePage() {
   return (
@@ -18,6 +19,7 @@ export default function HomePage() {
         <PlaygroundSection />
         <InstallSection />
         <RecipesSection />
+        <StoreSection />
         <RuntimesSection />
         <AgentSection />
       </main>

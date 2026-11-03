@@ -47,8 +47,10 @@ export async function POST(req: Request) {
 
 - 🪶 **Zero Dependencies**: 0 runtime dependencies for a tiny bundle footprint.
 - ⚡ **Universal Edge Support**: Built entirely on the Web Cryptography API (`crypto.subtle`) and Web Standards (`Request`, `Headers`, `Uint8Array`). Works on Node.js, Bun, Deno, Cloudflare Workers, Next.js Edge, and Fastly Compute.
+- 🔄 **Automatic Stream-Cloning**: Internally calls `req.clone().text()`, leaving the incoming body stream unconsumed (`req.bodyUsed === false`) so downstream middleware, proxies, and logging never throw `Body already consumed`.
 - ⏱️ **Constant-Time Comparison**: Built-in timing-safe equality prevents timing side-channel attacks.
-- 🛡️ **Replay Protection**: Built-in timestamp tolerance verification.
+- 🛡️ **Replay Protection & Store**: Built-in timestamp tolerance verification plus pluggable memory / Redis / Cloudflare KV idempotency stores (`WebhookReplayStore`).
+- 🚀 **Universal 3-Line Route Handler**: `createWebhookHandler` drops directly into Next.js App Router and Hono with automatic error mapping (`401`, `400`, `409`) and typed dispatch.
 - 🧩 **Extensible Architecture**: Modular provider plugin system (Stripe, GitHub, Shopify, and custom providers).
 - 🤖 **Agent-First DX**: Includes specialized rules and CLI tools to ensure AI assistants (Cursor, Claude, Copilot) write safe webhook code.
 
@@ -140,11 +142,25 @@ const payload = await assertWebhookSignature({
 
 ---
 
-## Framework Recipes
+## Framework Recipes & Automatic Stream-Cloning
+
+In modern Web Standards runtimes (Next.js App Router, Hono, Cloudflare Workers), the incoming `Request` body is a single-use `ReadableStream`. In conventional implementations, consuming the stream via `await req.text()` drains it immediately (`req.bodyUsed === true`), which breaks downstream middleware, logging proxies, or subsequent `await req.json()` handlers with:
+
+```text
+TypeError: Body has already been consumed
+```
+
+`webhook-kit` solves this transparently with **automatic stream-cloning**:
+
+- When you pass a `Request` to `verifyWebhookSignature` or `createWebhookHandler`, the library internally calls `request.clone().text()`.
+- The original incoming `Request` remains pristine and unconsumed (`req.bodyUsed === false`).
+- You can safely inspect typed payloads, access raw event bytes, forward the untouched `Request` to upstream services or queues, or invoke `await req.json()` downstream without stream errors.
 
 ### Next.js App Router (`app/api/webhook/route.ts`)
 
-Export `createWebhookHandler` directly as your `POST` route handler, or pass the Web Standard `Request` to `verifyWebhookSignature` without calling `await req.json()` first:
+#### Option A: Declarative 3-Line Route Handler (`createWebhookHandler`)
+
+Export `createWebhookHandler` directly as your Next.js `POST` route handler. It automatically unwraps the `Request`, clones the stream, verifies HMAC and replay timestamp tolerances, and dispatches the typed event:
 
 ```ts
 // app/api/webhook/route.ts — 3-line declarative route handler
@@ -153,10 +169,12 @@ import { createWebhookHandler } from "@amirabaris/webhook-kit";
 export const POST = createWebhookHandler({
   provider: "stripe",
   secret: process.env.STRIPE_WEBHOOK_SECRET!,
-  onEvent: async (event) => {
+  onEvent: async (event, { rawBody, request }) => {
+    // event is strongly typed StripeWebhookEvent
+    // request.bodyUsed remains false thanks to automatic stream-cloning!
     switch (event.type) {
       case "checkout.session.completed":
-        // Handle business logic safely with typed StripeWebhookEvent
+        console.log("Fulfilling checkout session:", event.data.object.id);
         break;
       default:
         console.log(`Unhandled event type: ${event.type}`);
@@ -165,7 +183,9 @@ export const POST = createWebhookHandler({
 });
 ```
 
-Or using `verifyWebhookSignature` directly:
+#### Option B: Manual Verification with Automatic Stream-Cloning (`verifyWebhookSignature`)
+
+If your route requires custom branching, telemetry, or subsequent body access, pass `req` directly. Because `webhook-kit` clones the stream internally, `req.bodyUsed` remains `false`:
 
 ```ts
 // app/api/webhook/route.ts
@@ -173,13 +193,14 @@ import { NextResponse } from "next/server";
 import { verifyWebhookSignature } from "@amirabaris/webhook-kit";
 
 export async function POST(req: Request) {
-  // CRITICAL: Pass the Web Standard `Request` object directly to `body`.
-  // Do NOT call `await req.json()` beforehand! Parsing JSON alters raw payload bytes and breaks HMAC.
-  // webhook-kit extracts raw bytes with req.clone() and automatically reads signature headers.
+  // Pass Web Standard `Request` directly.
+  // webhook-kit clones the stream via req.clone(), extracting exact raw bytes
+  // without consuming the original request stream (req.bodyUsed stays false).
   const result = await verifyWebhookSignature({
     body: req,
     secret: process.env.STRIPE_WEBHOOK_SECRET!,
     provider: "stripe", // Automatically parses and verifies Stripe-Signature (v1 + timestamp)
+    toleranceSeconds: 300,
   });
 
   if (!result.valid) {
@@ -189,21 +210,26 @@ export async function POST(req: Request) {
     });
   }
 
-  // result.payload is typed StripeWebhookEvent
+  // ✅ Strongly typed payload parsed after valid HMAC verification
   const event = result.payload;
-  console.log("Received Stripe event:", event.type, event.id);
+  console.log("Verified Stripe event:", event.type, event.id);
 
-  return NextResponse.json({ received: true });
+  // ✅ Automatic stream-cloning guarantee:
+  // req.bodyUsed is STILL false! Downstream handlers, logging utilities,
+  // or req.json() can still execute safely without throwing "Body already read":
+  // const rawJson = await req.json();
+
+  return NextResponse.json({ received: true, id: event.id });
 }
 ```
 
-### Cloudflare Workers / Hono (`src/index.ts`)
+### Hono (`src/index.ts`)
 
-`webhook-kit` has zero runtime dependencies and uses standard `crypto.subtle`, making it run natively on Cloudflare Workers and Hono without Node.js compatibility flags or polyfills.
+`webhook-kit` natively supports Hono routes in edge and serverless environments.
 
-#### Hono
+#### Option A: Declarative Route Handler (`createWebhookHandler`)
 
-`createWebhookHandler` natively unwraps Hono's `Context` (`c.req.raw`) and supports dynamic secret resolution from `c.env`:
+`createWebhookHandler` automatically unwraps Hono's `Context` (`c.req.raw`), resolves environment secrets dynamically via `c.env`, clones the stream, and dispatches verified events:
 
 ```ts
 // src/index.ts
@@ -216,14 +242,16 @@ type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
+// Natively unwraps Hono Context, clones c.req.raw, and resolves dynamic secrets
 app.post(
   "/api/webhook",
   createWebhookHandler({
     provider: "github",
     secret: (c) => c.env.GITHUB_WEBHOOK_SECRET,
-    onEvent: async (event) => {
+    onEvent: async (event, { request }) => {
       // event is strongly typed GithubWebhookEvent
-      console.log("GitHub event:", event.action);
+      // request.bodyUsed is false — Hono context is completely undisturbed
+      console.log("Verified GitHub webhook action:", event.action);
     },
   }),
 );
@@ -231,17 +259,64 @@ app.post(
 export default app;
 ```
 
-#### Cloudflare Workers (Native `fetch`)
+#### Option B: Manual Verification with Automatic Stream-Cloning (`verifyWebhookSignature`)
+
+Pass `c.req.raw` directly to `verifyWebhookSignature`. Because `c.req.raw` is cloned under the hood, subsequent Hono middleware or route logic can still call `await c.req.json()` or `await c.req.text()` without triggering a stream exhaustion error:
 
 ```ts
+// src/index.ts
+import { Hono } from "hono";
+import { verifyWebhookSignature } from "@amirabaris/webhook-kit";
+
+type Bindings = {
+  GITHUB_WEBHOOK_SECRET: string;
+};
+
+const app = new Hono<{ Bindings: Bindings }>();
+
+app.post("/api/webhook", async (c) => {
+  // Pass c.req.raw directly — webhook-kit clones the stream internally:
+  const result = await verifyWebhookSignature({
+    body: c.req.raw,
+    secret: c.env.GITHUB_WEBHOOK_SECRET,
+    provider: "github",
+  });
+
+  if (!result.valid) {
+    return c.text(`Unauthorized: ${result.error.message}`, 401);
+  }
+
+  // ✅ c.req.raw was not consumed: other Hono plugins or c.req.json() remain fully usable!
+  const event = result.payload;
+  return c.json({ received: true, action: event.action });
+});
+
+export default app;
+```
+
+### Cloudflare Workers (`src/worker.ts`)
+
+Cloudflare Workers isolates enforce strict single-read constraints on incoming `ReadableStream` instances. `webhook-kit` runs with zero Node polyfills and uses standard `crypto.subtle`.
+
+#### Automatic Stream-Cloning & Proxy Forwarding
+
+When passing `request` to `verifyWebhookSignature`, `webhook-kit` invokes `request.clone().text()`. This keeps `request.bodyUsed === false`, allowing you to safely forward the pristine original `request` to an upstream backend, queue, or analytics pipeline:
+
+```ts
+// src/worker.ts
 import { verifyWebhookSignature } from "@amirabaris/webhook-kit";
 
 interface Env {
   STRIPE_WEBHOOK_SECRET: string;
+  INTERNAL_API_URL: string;
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
     if (
       request.method !== "POST" ||
       new URL(request.url).pathname !== "/api/webhook"
@@ -249,10 +324,14 @@ export default {
       return new Response("Not Found", { status: 404 });
     }
 
+    // Automatic Stream-Cloning:
+    // Webhook-kit automatically clones request via request.clone().
+    // Cryptographic HMAC verification succeeds WITHOUT locking or draining request.body!
     const result = await verifyWebhookSignature({
       body: request,
       secret: env.STRIPE_WEBHOOK_SECRET,
       provider: "stripe",
+      toleranceSeconds: 300,
     });
 
     if (!result.valid) {
@@ -261,7 +340,14 @@ export default {
       });
     }
 
-    return Response.json({ received: true });
+    // ✅ request.bodyUsed is STILL false!
+    // You can forward the original unconsumed request directly to your internal service:
+    const upstreamResponse = await fetch(env.INTERNAL_API_URL, request);
+
+    return new Response(upstreamResponse.body, {
+      status: upstreamResponse.status,
+      headers: upstreamResponse.headers,
+    });
   },
 };
 ```

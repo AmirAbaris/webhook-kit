@@ -14,11 +14,30 @@ export function HeroSection() {
       className="relative overflow-hidden border-b border-border/60 py-16 sm:py-24"
     >
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
-        <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground">
-          <span className="size-1.5 rounded-full bg-muted-foreground/60" aria-hidden="true" />
+        <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-border/80 bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground">
+          <span
+            className="size-1.5 rounded-full bg-emerald-500"
+            aria-hidden="true"
+          />
           <span className="text-foreground">Zero dependencies</span>
-          <span className="text-border" aria-hidden="true">·</span>
-          <span>Web Cryptography API (<code className="font-mono text-[11px] text-foreground/80">crypto.subtle</code>)</span>
+          <span className="text-border" aria-hidden="true">
+            ·
+          </span>
+          <span>
+            Web Crypto (
+            <code className="font-mono text-[11px] text-foreground/80">
+              crypto.subtle
+            </code>
+            )
+          </span>
+          <span className="text-border" aria-hidden="true">
+            ·
+          </span>
+          <span className="text-foreground">Stream-Cloning</span>
+          <span className="text-border" aria-hidden="true">
+            ·
+          </span>
+          <span>Replay Attack Store</span>
         </div>
 
         <h1
