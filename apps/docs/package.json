@@ -1,27 +1,30 @@
 {
-  "name": "docs",
+  "name": "webhook-kit-docs",
   "version": "0.0.1",
+  "description": "Documentation site for webhook-kit (Next.js + shadcn)",
   "type": "module",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "pnpm --workspace-root run build && next build",
     "start": "next start",
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "shadcn:add": "pnpm dlx shadcn@latest add"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "cn": "^0.5.1",
     "lucide-react": "^1.66.0",
     "next": "16.4.3",
     "next-themes": "^0.4.6",
+    "prism-react-renderer": "^2.4.1",
     "radix-ui": "^1.8.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "tailwind-merge": "^3.7.0"
+    "tailwind-merge": "^3.7.0",
+    "webhook-kit": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

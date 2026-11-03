@@ -6,3 +6,5 @@ dist
 coverage
 *.log
 apps
+pnpm-lock.yaml
+
