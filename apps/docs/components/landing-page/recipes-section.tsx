@@ -11,7 +11,7 @@ export function RecipesSection() {
     >
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="max-w-2xl">
-          <p className="font-mono text-xs font-semibold tracking-wider text-primary uppercase">
+          <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
             Framework Recipes
           </p>
           <h2

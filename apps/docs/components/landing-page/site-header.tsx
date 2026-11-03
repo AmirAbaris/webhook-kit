@@ -17,13 +17,13 @@ export function SiteHeader() {
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 sm:px-6">
         <a
           href="#top"
-          className="flex items-center gap-2 font-mono text-sm font-semibold tracking-tight text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none"
+          className="flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none"
         >
-          <span className="flex size-7 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/30">
+          <span className="flex size-7 items-center justify-center rounded-md border border-border bg-muted/60 text-foreground">
             <ShieldCheck className="size-4" />
           </span>
           <span>{SITE.name}</span>
-          <span className="hidden rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground sm:inline-block">
+          <span className="hidden rounded-sm border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground sm:inline-block">
             v0.1.0
           </span>
         </a>

@@ -12,7 +12,7 @@ export function InstallSection() {
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="flex flex-col justify-between gap-6 md:flex-row md:items-center">
           <div className="max-w-md">
-            <p className="font-mono text-xs font-semibold tracking-wider text-primary uppercase">
+            <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
               Installation
             </p>
             <h2

@@ -41,9 +41,9 @@ export function CodeBlock({
                 className={cn(
                   "inline-flex items-center rounded-sm px-1.5 py-0.5 font-mono text-[11px] font-medium",
                   badgeVariant === "success" &&
-                    "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30",
+                    "bg-zinc-800 text-zinc-200 ring-1 ring-zinc-700",
                   badgeVariant === "danger" &&
-                    "bg-red-500/15 text-red-300 ring-1 ring-red-500/30",
+                    "bg-destructive/15 text-destructive ring-1 ring-destructive/30",
                   badgeVariant === "default" &&
                     "bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700"
                 )}

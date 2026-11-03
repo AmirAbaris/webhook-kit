@@ -23,9 +23,9 @@ export function AgentSection() {
     >
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 font-mono text-xs font-semibold tracking-wider text-primary uppercase">
+          <div className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
             <Bot className="size-3.5" />
-            <span>Agent-First Developer Experience</span>
+            <span>Agent Guardrails</span>
           </div>
           <h2
             id="agent-heading"
