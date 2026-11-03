@@ -2,16 +2,16 @@ import { Bot } from "lucide-react"
 import { CodeBlock } from "@/components/code/code-block"
 
 const INIT_AGENT_COMMANDS = `# Autodetect AGENTS.md or CLAUDE.md and inject rules
-npx webhook-kit init-agent
+npx @amirabaris/webhook-kit init-agent
 
 # Or specify an explicit target file
-npx webhook-kit init-agent --target CLAUDE.md`
+npx @amirabaris/webhook-kit init-agent --target CLAUDE.md`
 
 const INJECTED_RULES_EXCERPT = `<!-- webhook-kit-agent-rules:start -->
 ### Webhook Signature Verification Rules (webhook-kit)
 - **NEVER parse JSON before verifying signatures**: In frameworks like Next.js, Hono, or Express, parsing JSON reorders keys and strips whitespace, invalidating cryptographic HMAC checks. Always pass the raw \`Request\` or raw text string.
-- **Constant-Time Verification**: Never compare signatures with \`===\` or \`!==\`. Always use \`timingSafeEqual\` or \`verifyWebhookSignature\` from \`webhook-kit\`.
-- **Zero Node-Only Crypto**: Web standard environments (Cloudflare Workers, Next.js Edge, Bun, Deno) do not support \`node:crypto\`. Rely on \`webhook-kit\` which uses \`crypto.subtle\`.
+- **Constant-Time Verification**: Never compare signatures with \`===\` or \`!==\`. Always use \`timingSafeEqual\` or \`verifyWebhookSignature\` from \`@amirabaris/webhook-kit\`.
+- **Zero Node-Only Crypto**: Web standard environments (Cloudflare Workers, Next.js Edge, Bun, Deno) do not support \`node:crypto\`. Rely on \`@amirabaris/webhook-kit\` which uses \`crypto.subtle\`.
 <!-- webhook-kit-agent-rules:end -->`
 
 export function AgentSection() {

@@ -1,7 +1,7 @@
 import type { NextConfig } from "next"
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["webhook-kit"],
+  transpilePackages: ["@amirabaris/webhook-kit"],
 }
 
 export default nextConfig

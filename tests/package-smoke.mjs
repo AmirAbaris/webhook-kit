@@ -81,16 +81,19 @@ try {
     .readdirSync(nodeModulesDir)
     .filter((pkg) => !pkg.startsWith("."));
 
-  if (
-    installedPackages.length !== 1 ||
-    installedPackages[0] !== "webhook-kit"
-  ) {
+  const isExpectedPackage =
+    (installedPackages.length === 1 &&
+      installedPackages[0] === "@amirabaris" &&
+      fs.existsSync(path.join(nodeModulesDir, "@amirabaris", "webhook-kit"))) ||
+    (installedPackages.length === 1 && installedPackages[0] === "webhook-kit");
+
+  if (!isExpectedPackage) {
     throw new Error(
       `Zero-dependency policy violated! Found unexpected packages in node_modules: ${installedPackages.join(", ")}`,
     );
   }
   console.log(
-    "✓ Zero runtime dependencies confirmed: only webhook-kit was installed.",
+    "✓ Zero runtime dependencies confirmed: only @amirabaris/webhook-kit was installed.",
   );
 
   // 6. Test ESM import in isolated sandbox
@@ -101,7 +104,7 @@ try {
       assertWebhookSignature,
       WebhookKitError,
       SignatureVerificationError
-    } from 'webhook-kit';
+    } from '@amirabaris/webhook-kit';
 
     if (typeof verifyWebhookSignature !== 'function') {
       throw new Error('verifyWebhookSignature is not exported as a function');

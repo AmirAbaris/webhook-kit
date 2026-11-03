@@ -11,7 +11,7 @@ export const RECIPES: readonly RecipeItem[] = [
     label: "Next.js App Router",
     filename: "app/api/webhook/route.ts",
     code: `import { NextResponse } from "next/server"
-import { verifyWebhookSignature } from "webhook-kit"
+import { verifyWebhookSignature } from "@amirabaris/webhook-kit"
 
 export async function POST(req: Request) {
   const result = await verifyWebhookSignature({
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     label: "Hono",
     filename: "src/index.ts",
     code: `import { Hono } from "hono"
-import { verifyWebhookSignature } from "webhook-kit"
+import { verifyWebhookSignature } from "@amirabaris/webhook-kit"
 
 type Bindings = { GITHUB_WEBHOOK_SECRET: string }
 const app = new Hono<{ Bindings: Bindings }>()
@@ -61,7 +61,7 @@ export default app`,
     id: "cloudflare-workers",
     label: "Cloudflare Workers",
     filename: "src/worker.ts",
-    code: `import { verifyWebhookSignature } from "webhook-kit"
+    code: `import { verifyWebhookSignature } from "@amirabaris/webhook-kit"
 
 interface Env {
   STRIPE_WEBHOOK_SECRET: string

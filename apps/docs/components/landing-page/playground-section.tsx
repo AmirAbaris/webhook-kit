@@ -12,7 +12,7 @@ import {
   computeSubtleHmac,
   verifyWebhookSignature,
   type WebhookVerificationResult,
-} from "webhook-kit"
+} from "@amirabaris/webhook-kit"
 import { Button } from "@/components/ui/button"
 
 const DEFAULT_SECRET = "whsec_live_demo_secret_key_9f8a7b"

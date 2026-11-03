@@ -98,7 +98,7 @@ export async function POST(req: Request) {
 
 ```ts
 import { Hono } from "hono";
-import { verifyWebhookSignature } from "webhook-kit";
+import { verifyWebhookSignature } from "@amirabaris/webhook-kit";
 
 const app = new Hono();
 
