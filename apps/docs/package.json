@@ -10,7 +10,7 @@
     "start": "next start",
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "pnpm --workspace-root run build && tsc --noEmit",
     "shadcn:add": "pnpm dlx shadcn@latest add"
   },
   "dependencies": {
