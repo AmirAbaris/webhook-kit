@@ -1,5 +1,4 @@
 import { AgentSection } from "@/components/landing-page/agent-section"
-import { FeaturesSection } from "@/components/landing-page/features-section"
 import { HeroSection } from "@/components/landing-page/hero-section"
 import { InstallSection } from "@/components/landing-page/install-section"
 import { PitfallSection } from "@/components/landing-page/pitfall-section"
@@ -18,7 +17,6 @@ export default function HomePage() {
         <PitfallSection />
         <PlaygroundSection />
         <InstallSection />
-        <FeaturesSection />
         <RecipesSection />
         <RuntimesSection />
         <AgentSection />

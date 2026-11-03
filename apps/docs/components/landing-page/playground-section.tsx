@@ -128,9 +128,9 @@ export function PlaygroundSection() {
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-1.5 font-mono text-xs font-semibold tracking-wider text-primary uppercase">
+            <div className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
               <FlaskConical className="size-3.5" />
-              <span>Live Browser Playground (crypto.subtle)</span>
+              <span>Interactive Playground</span>
             </div>
             <h2
               id="playground-heading"
@@ -168,7 +168,7 @@ export function PlaygroundSection() {
                 htmlFor="playground-secret"
                 className="flex items-center gap-1.5 font-mono text-xs font-medium text-foreground"
               >
-                <KeyRound className="size-3.5 text-primary" />
+                <KeyRound className="size-3.5 text-muted-foreground" />
                 <span>Signing Secret</span>
               </label>
               <input
@@ -212,7 +212,7 @@ export function PlaygroundSection() {
             ) : null}
 
             {state.status === "invalid-json" ? (
-              <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-5 text-xs text-red-400">
+              <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-5 text-xs text-destructive">
                 <p className="font-semibold">Invalid JSON Input</p>
                 <p className="mt-1 font-mono">{state.message}</p>
               </div>
@@ -228,7 +228,7 @@ export function PlaygroundSection() {
                   </div>
                   <p
                     data-testid="playground-signature"
-                    className="mt-1.5 font-mono text-xs break-all text-primary"
+                    className="mt-1.5 font-mono text-xs break-all text-foreground"
                   >
                     {state.signature}
                   </p>
@@ -272,16 +272,16 @@ function VerificationCard({
       data-testid={testId}
       className={
         result.valid
-          ? "rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4"
-          : "rounded-xl border border-red-500/40 bg-red-500/10 p-4"
+          ? "rounded-xl border border-border bg-card p-4"
+          : "rounded-xl border border-destructive/40 bg-destructive/10 p-4"
       }
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           {result.valid ? (
-            <CheckCircle2 className="size-4 shrink-0 text-emerald-500 dark:text-emerald-400" />
+            <CheckCircle2 className="size-4 shrink-0 text-foreground" />
           ) : (
-            <XCircle className="size-4 shrink-0 text-red-500 dark:text-red-400" />
+            <XCircle className="size-4 shrink-0 text-destructive" />
           )}
           <h3 className="font-mono text-xs font-semibold text-foreground">
             {title}
@@ -290,8 +290,8 @@ function VerificationCard({
         <span
           className={
             result.valid
-              ? "shrink-0 rounded-sm bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-emerald-600 dark:text-emerald-300"
-              : "shrink-0 rounded-sm bg-red-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-red-600 dark:text-red-300"
+              ? "shrink-0 rounded-sm border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] font-medium text-foreground"
+              : "shrink-0 rounded-sm border border-destructive/30 bg-destructive/15 px-1.5 py-0.5 font-mono text-[11px] font-medium text-destructive"
           }
         >
           {result.valid ? "valid: true" : "valid: false"}
@@ -299,7 +299,7 @@ function VerificationCard({
       </div>
       <p className="mt-1.5 text-xs text-muted-foreground">{subtitle}</p>
       {!result.valid ? (
-        <p className="mt-2 rounded-md bg-zinc-950/80 px-2.5 py-1.5 font-mono text-[11px] text-red-300">
+        <p className="mt-2 rounded-md bg-muted px-2.5 py-1.5 font-mono text-[11px] text-destructive">
           {result.error.name}: {result.error.message}
         </p>
       ) : null}

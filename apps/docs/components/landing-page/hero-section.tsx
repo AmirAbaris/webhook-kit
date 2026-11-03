@@ -1,4 +1,4 @@
-import { ArrowRight, Sparkles, Terminal } from "lucide-react"
+import { ArrowRight, Terminal } from "lucide-react"
 import { CopyButton } from "@/components/code/copy-button"
 import { Button } from "@/components/ui/button"
 import { PACKAGE_MANAGERS } from "@/constants/install"
@@ -14,9 +14,11 @@ export function HeroSection() {
       className="relative overflow-hidden border-b border-border/60 py-16 sm:py-24"
     >
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
-        <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 font-mono text-xs font-medium text-primary">
-          <Sparkles className="size-3.5" />
-          <span>0 dependencies · Web Cryptography API (crypto.subtle)</span>
+        <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground">
+          <span className="size-1.5 rounded-full bg-muted-foreground/60" aria-hidden="true" />
+          <span className="text-foreground">Zero dependencies</span>
+          <span className="text-border" aria-hidden="true">·</span>
+          <span>Web Cryptography API (<code className="font-mono text-[11px] text-foreground/80">crypto.subtle</code>)</span>
         </div>
 
         <h1
@@ -33,7 +35,7 @@ export function HeroSection() {
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-zinc-950 px-3.5 py-2 font-mono text-xs text-zinc-100 sm:min-w-72">
             <div className="flex items-center gap-2 truncate">
-              <Terminal className="size-3.5 shrink-0 text-emerald-400" />
+              <Terminal className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="truncate">{defaultCommand}</span>
             </div>
             <CopyButton value={defaultCommand} label="Copy install command" />

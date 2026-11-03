@@ -10,7 +10,7 @@ export function RuntimesSection() {
     >
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="max-w-2xl">
-          <p className="font-mono text-xs font-semibold tracking-wider text-primary uppercase">
+          <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
             Supported Runtimes
           </p>
           <h2
@@ -48,9 +48,9 @@ export function RuntimesSection() {
                     <td className="px-4 py-3 font-semibold text-foreground">
                       {runtime.name}
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-emerald-600 dark:text-emerald-400">
+                    <td className="px-4 py-3 font-mono text-xs text-foreground">
                       <span className="inline-flex items-center gap-1.5">
-                        <CheckCircle2 className="size-3.5 shrink-0" />
+                        <CheckCircle2 className="size-3.5 shrink-0 text-muted-foreground" />
                         <span>{runtime.support}</span>
                       </span>
                     </td>

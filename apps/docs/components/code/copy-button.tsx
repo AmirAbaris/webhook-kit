@@ -48,7 +48,7 @@ export function CopyButton({
       )}
     >
       {copied ? (
-        <Check className="size-3.5 text-emerald-400" />
+        <Check className="size-3.5" />
       ) : (
         <Copy className="size-3.5" />
       )}

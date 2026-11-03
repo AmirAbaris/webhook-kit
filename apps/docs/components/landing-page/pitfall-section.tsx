@@ -11,7 +11,7 @@ export function PitfallSection() {
     >
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="max-w-3xl">
-          <p className="font-mono text-xs font-semibold tracking-wider text-primary uppercase">
+          <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
             Why webhooks fail in production
           </p>
           <h2
@@ -41,7 +41,7 @@ export function PitfallSection() {
           </div>
 
           <div className="flex min-w-0 flex-col gap-2.5">
-            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+            <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
               <CheckCircle2 className="size-4 shrink-0" />
               <span>{PITFALL.right.label}</span>
             </div>
@@ -49,8 +49,8 @@ export function PitfallSection() {
               code={PITFALL.right.code}
               filename={PITFALL.right.filename}
               badge={PITFALL.right.badge}
-              badgeVariant="success"
-              className="flex-1 border-emerald-500/30"
+              badgeVariant="default"
+              className="flex-1 border-border/80"
             />
           </div>
         </div>
