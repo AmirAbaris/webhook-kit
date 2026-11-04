@@ -15,27 +15,27 @@ This document defines mandatory guidelines, conventions, and anti-patterns for A
 
 ## 2. The #1 Anti-Pattern: The JSON Re-serialization Trap
 
-### ❌ Fatal Mistake: Re-stringifying Parsed JSON
+### Fatal Mistake: Re-stringifying Parsed JSON
 
 ```ts
-// ❌ WRONG: Calling .json() parses the payload, stripping whitespace and reordering keys.
+// WRONG: Calling .json() parses the payload, stripping whitespace and reordering keys.
 // Calling JSON.stringify() produces a DIFFERENT string than the sender sent!
 // HMAC check will ALWAYS fail in production.
 export async function POST(req: Request) {
   const json = await req.json();
   const signature = req.headers.get("stripe-signature");
   const valid = await verifyWebhookSignature({
-    body: JSON.stringify(json), // ❌ BREAKS SIGNATURE VERIFICATION!
+    body: JSON.stringify(json), // BREAKS SIGNATURE VERIFICATION
     signature,
     secret: process.env.STRIPE_WEBHOOK_SECRET!,
   });
 }
 ```
 
-### ✅ Correct Pattern: Capture Raw Body First
+### Correct Pattern: Capture Raw Body First
 
 ```ts
-// ✅ CORRECT: Extract raw text or clone the Request stream BEFORE parsing JSON.
+// CORRECT: Extract raw text or clone the Request stream BEFORE parsing JSON.
 export async function POST(req: Request) {
   const rawBody = await req.text(); // or pass the Request directly to verifyWebhookSignature
   const signature = req.headers.get("stripe-signature")!;

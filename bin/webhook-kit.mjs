@@ -77,7 +77,7 @@ function buildUpdatedAgentContent(existingContent, targetFile) {
 
   if (hasMarkers) {
     const regex = new RegExp(`${START_MARKER}[\\s\\S]*?${END_MARKER}`, "g");
-    console.log(`✓ Updated existing webhook-kit rules in ${targetFile}`);
+    console.log(`Updated existing webhook-kit rules in ${targetFile}`);
     return existingContent.replace(regex, AGENT_RULES_CONTENT);
   }
 
@@ -85,7 +85,7 @@ function buildUpdatedAgentContent(existingContent, targetFile) {
     existingContent.length > 0 && !existingContent.endsWith("\n\n")
       ? "\n\n"
       : "";
-  console.log(`✓ Injected webhook-kit rules into ${targetFile}`);
+  console.log(`Injected webhook-kit rules into ${targetFile}`);
   return `${existingContent}${separator}${AGENT_RULES_CONTENT}\n`;
 }
 
