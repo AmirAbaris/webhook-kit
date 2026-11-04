@@ -104,7 +104,8 @@ interface Env {
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (request.method !== "POST" || new URL(request.url).pathname !== "/api/webhook") {
-      return new Response("Not Found", { status: 404 })\n    }
+      return new Response("Not Found", { status: 404 })
+    }
 
     // Automatic Stream-Cloning:
     // Cloudflare Workers isolates strictly lock streams once read.
@@ -134,6 +135,81 @@ export default {
 }`,
   },
   {
+    id: "express",
+    label: "Express",
+    filename: "server.ts",
+    code: `import express from "express"
+import { verifyWebhookSignature } from "@amirabaris/webhook-kit"
+
+const app = express()
+
+// CRITICAL: Webhook routes must receive raw payload bytes (Buffer)
+// Register this handler BEFORE any global express.json() middleware!
+app.post(
+  "/api/webhook",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    // req.body is a raw Buffer (Uint8Array), preserving original byte sequence
+    const result = await verifyWebhookSignature({
+      body: req.body,
+      headers: req.headers,
+      secret: process.env.STRIPE_WEBHOOK_SECRET!,
+      provider: "stripe",
+    })
+
+    if (!result.valid) {
+      return res.status(400).send(\`Webhook Error: \${result.error.message}\`)
+    }
+
+    // Safe: typed payload parsed after HMAC verification
+    console.log("Verified event:", result.payload.type)
+    return res.json({ received: true })
+  }
+)
+
+// Global JSON middleware for standard API endpoints
+app.use(express.json())
+
+app.listen(3000, () => console.log("Server listening on port 3000"))`,
+  },
+  {
+    id: "node-http",
+    label: "Node.js (node:http)",
+    filename: "server.mjs",
+    code: `import http from "node:http"
+import { verifyWebhookSignature } from "@amirabaris/webhook-kit"
+
+const server = http.createServer(async (req, res) => {
+  if (req.method === "POST" && req.url === "/api/webhook") {
+    // Buffer raw incoming stream chunks to preserve exact byte sequence
+    const chunks: Buffer[] = []
+    for await (const chunk of req) {
+      chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk)
+    }
+    const rawBody = Buffer.concat(chunks)
+
+    const result = await verifyWebhookSignature({
+      body: rawBody,
+      headers: req.headers,
+      secret: process.env.WEBHOOK_SECRET!,
+      provider: "shopify",
+    })
+
+    if (!result.valid) {
+      res.writeHead(400, { "Content-Type": "text/plain" })
+      return res.end(\`Verification failed: \${result.error.message}\`)
+    }
+
+    res.writeHead(200, { "Content-Type": "application/json" })
+    return res.end(JSON.stringify({ received: true }))
+  }
+
+  res.writeHead(404).end()
+})
+
+server.listen(3000)`,
+  },
+  {
     id: "handler",
     label: "Universal Route Handler",
     filename: "app/api/webhook/route.ts",
@@ -142,7 +218,7 @@ export default {
   createInMemoryReplayStore,
 } from "@amirabaris/webhook-kit"
 
-// Universal 3-line handler for Next.js App Router, Hono, Remix, and Bun
+// Universal 3-line handler for Next.js App Router, Hono, Remix, Bun, and Deno
 export const POST = createWebhookHandler({
   provider: "stripe",
   secret: process.env.STRIPE_WEBHOOK_SECRET!,
@@ -153,7 +229,7 @@ export const POST = createWebhookHandler({
     // Automatically returns 200 { received: true } upon completion
     console.log(\`Processing unique event \${eventId}:\`, event.type)
   },
-  // Automatically returns 401 on bad signature, 400 on bad payload, 409 on duplicate replay
+  // Automatically maps: 401 on bad signature, 400 on bad payload, 409 on duplicate replay
 })`,
   },
   {
