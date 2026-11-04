@@ -30,7 +30,7 @@ export function SiteHeader() {
           </span>
           <span>{SITE.name}</span>
           <span className="hidden rounded-sm border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground sm:inline-block">
-            v0.1.0
+            {SITE.version}
           </span>
         </Link>
 
