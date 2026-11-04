@@ -18,7 +18,7 @@ export const POST = createWebhookHandler({
   provider: "stripe",
   secret: process.env.STRIPE_WEBHOOK_SECRET!,
   onEvent: async (event, { rawBody, request }) => {
-    // Webhook stream was cloned via request.clone() — original request is untouched!
+    // Webhook stream was cloned via request.clone() — original request is untouched
     console.log("Verified Stripe event:", event.type, event.id)
   },
 })
@@ -40,8 +40,8 @@ export async function manualPOST(req: Request) {
     })
   }
 
-  // ✅ req.bodyUsed is STILL false!
-  // Downstream telemetry or req.json() can still execute safely without throwing:
+  // Safe: req.bodyUsed is still false.
+  // Downstream telemetry or req.json() can still execute safely:
   // const json = await req.json()
 
   const event = result.payload
@@ -84,7 +84,7 @@ app.post("/api/webhook-manual", async (c) => {
     return c.text(\`Unauthorized: \${result.error.message}\`, 401)
   }
 
-  // ✅ c.req.raw was preserved: subsequent Hono plugins or c.req.json() work normally
+  // Safe: c.req.raw was preserved; subsequent Hono plugins or c.req.json() work normally
   return c.json({ received: true, action: result.payload.action })
 })
 
@@ -104,12 +104,11 @@ interface Env {
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (request.method !== "POST" || new URL(request.url).pathname !== "/api/webhook") {
-      return new Response("Not Found", { status: 404 })
-    }
+      return new Response("Not Found", { status: 404 })\n    }
 
     // Automatic Stream-Cloning:
     // Cloudflare Workers isolates strictly lock streams once read.
-    // webhook-kit automatically calls request.clone(), leaving request.bodyUsed === false!
+    // webhook-kit automatically calls request.clone(), leaving request.bodyUsed === false.
     const result = await verifyWebhookSignature({
       body: request,
       secret: env.STRIPE_WEBHOOK_SECRET,
@@ -123,7 +122,7 @@ export default {
       })
     }
 
-    // ✅ request.bodyUsed is STILL false!
+    // Safe: request.bodyUsed is still false.
     // Forward the original, unconsumed request directly to an internal service or queue:
     const upstreamResponse = await fetch(env.INTERNAL_API_URL, request)
 

@@ -1,22 +1,28 @@
 "use client"
 
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { ExternalLink, Moon, ShieldCheck, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
 import { SITE } from "@/constants/site"
+import { cn } from "@/lib/utils"
 
 export function SiteHeader() {
   const { resolvedTheme, setTheme } = useTheme()
+  const pathname = usePathname()
 
   function toggleTheme() {
     setTheme(resolvedTheme === "dark" ? "light" : "dark")
   }
 
+  const isDocs = pathname.startsWith("/docs")
+
   return (
     <header className="sticky top-0 z-30 border-b border-border/80 bg-background/85 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 sm:px-6">
-        <a
-          href="#top"
+      <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4 sm:px-6">
+        <Link
+          href="/"
           className="flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none"
         >
           <span className="flex size-7 items-center justify-center rounded-md border border-border bg-muted/60 text-foreground">
@@ -26,36 +32,23 @@ export function SiteHeader() {
           <span className="hidden rounded-sm border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground sm:inline-block">
             v0.1.0
           </span>
-        </a>
+        </Link>
 
         <nav
           aria-label="Primary navigation"
           className="flex items-center gap-1.5 sm:gap-2"
         >
-          <a
-            href="#playground"
-            className="hidden rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
+          <Link
+            href="/docs"
+            className={cn(
+              "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+              isDocs
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
           >
-            Playground
-          </a>
-          <a
-            href="#recipes"
-            className="hidden rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
-          >
-            Recipes
-          </a>
-          <a
-            href="#store"
-            className="hidden rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground md:inline-flex"
-          >
-            Replay Store
-          </a>
-          <a
-            href="#runtimes"
-            className="hidden rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground md:inline-flex"
-          >
-            Runtimes
-          </a>
+            Docs
+          </Link>
           <Button asChild variant="outline" size="sm">
             <a
               href={SITE.npmUrl}

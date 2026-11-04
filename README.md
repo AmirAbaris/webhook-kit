@@ -15,18 +15,18 @@ Developers building webhooks in modern frameworks (Next.js, Hono, Remix, Cloudfl
 Why? Because parsing incoming requests as JSON strips original whitespace, normalizes numbers, and reorders object keys. When you try to re-stringify that JSON, **the resulting string does not match the sender's original payload bytes**, immediately breaking cryptographic HMAC verification:
 
 ```ts
-// ❌ THE PITFALL: Parsing JSON changes bytes and invalidates HMAC
+// The pitfall: Parsing JSON changes bytes and invalidates HMAC
 export async function POST(req: Request) {
   const json = await req.json(); // strips whitespace & reorders keys
-  const isValid = verify(JSON.stringify(json), sig, secret); // 💥 ALWAYS FAILS
+  const isValid = verify(JSON.stringify(json), sig, secret); // Fails verification
 }
 
-// ✅ WITH WEBHOOK-KIT: Direct Web Standard verification & constant-time check
+// With webhook-kit: Direct Web Standard verification & constant-time check
 import { verifyWebhookSignature } from "@amirabaris/webhook-kit";
 
 export async function POST(req: Request) {
   const result = await verifyWebhookSignature({
-    body: req, // Pass Web Standard Request directly!
+    body: req, // Pass Web Standard Request directly
     signature: req.headers.get("x-signature")!,
     secret: process.env.WEBHOOK_SECRET!,
   });
@@ -45,14 +45,14 @@ export async function POST(req: Request) {
 
 ## Why `webhook-kit`?
 
-- 🪶 **Zero Dependencies**: 0 runtime dependencies for a tiny bundle footprint.
-- ⚡ **Universal Edge Support**: Built entirely on the Web Cryptography API (`crypto.subtle`) and Web Standards (`Request`, `Headers`, `Uint8Array`). Works on Node.js, Bun, Deno, Cloudflare Workers, Next.js Edge, and Fastly Compute.
-- 🔄 **Automatic Stream-Cloning**: Internally calls `req.clone().text()`, leaving the incoming body stream unconsumed (`req.bodyUsed === false`) so downstream middleware, proxies, and logging never throw `Body already consumed`.
-- ⏱️ **Constant-Time Comparison**: Built-in timing-safe equality prevents timing side-channel attacks.
-- 🛡️ **Replay Protection & Store**: Built-in timestamp tolerance verification plus pluggable memory / Redis / Cloudflare KV idempotency stores (`WebhookReplayStore`).
-- 🚀 **Universal 3-Line Route Handler**: `createWebhookHandler` drops directly into Next.js App Router and Hono with automatic error mapping (`401`, `400`, `409`) and typed dispatch.
-- 🧩 **Extensible Architecture**: Modular provider plugin system (Stripe, GitHub, Shopify, and custom providers).
-- 🤖 **Agent-First DX**: Includes specialized rules and CLI tools to ensure AI assistants (Cursor, Claude, Copilot) write safe webhook code.
+- **Zero Dependencies**: 0 runtime dependencies for a tiny bundle footprint.
+- **Universal Edge Support**: Built entirely on the Web Cryptography API (`crypto.subtle`) and Web Standards (`Request`, `Headers`, `Uint8Array`). Works on Node.js, Bun, Deno, Cloudflare Workers, Next.js Edge, and Fastly Compute.
+- **Automatic Stream-Cloning**: Internally calls `req.clone().text()`, leaving the incoming body stream unconsumed (`req.bodyUsed === false`) so downstream middleware, proxies, and logging never throw `Body already consumed`.
+- **Constant-Time Comparison**: Built-in timing-safe equality prevents timing side-channel attacks.
+- **Replay Protection & Store**: Built-in timestamp tolerance verification plus pluggable memory / Redis / Cloudflare KV idempotency stores (`WebhookReplayStore`).
+- **Universal 3-Line Route Handler**: `createWebhookHandler` drops directly into Next.js App Router and Hono with automatic error mapping (`401`, `400`, `409`) and typed dispatch.
+- **Extensible Architecture**: Modular provider plugin system (Stripe, GitHub, Shopify, and custom providers).
+- **Agent-First DX**: Includes specialized rules and CLI tools to ensure AI assistants (Cursor, Claude, Copilot) write safe webhook code.
 
 ---
 
@@ -210,11 +210,11 @@ export async function POST(req: Request) {
     });
   }
 
-  // ✅ Strongly typed payload parsed after valid HMAC verification
+  // Strongly typed payload parsed after valid HMAC verification
   const event = result.payload;
   console.log("Verified Stripe event:", event.type, event.id);
 
-  // ✅ Automatic stream-cloning guarantee:
+  // Automatic stream-cloning guarantee:
   // req.bodyUsed is STILL false! Downstream handlers, logging utilities,
   // or req.json() can still execute safely without throwing "Body already read":
   // const rawJson = await req.json();
@@ -286,7 +286,7 @@ app.post("/api/webhook", async (c) => {
     return c.text(`Unauthorized: ${result.error.message}`, 401);
   }
 
-  // ✅ c.req.raw was not consumed: other Hono plugins or c.req.json() remain fully usable!
+  // Safe: c.req.raw was not consumed: other Hono plugins or c.req.json() remain fully usable!
   const event = result.payload;
   return c.json({ received: true, action: event.action });
 });
@@ -340,7 +340,7 @@ export default {
       });
     }
 
-    // ✅ request.bodyUsed is STILL false!
+    // Safe: request.bodyUsed is still false!
     // You can forward the original unconsumed request directly to your internal service:
     const upstreamResponse = await fetch(env.INTERNAL_API_URL, request);
 

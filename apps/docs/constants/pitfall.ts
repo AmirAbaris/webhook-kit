@@ -8,7 +8,7 @@ export const PITFALL = {
     badge: "Always Fails HMAC",
     code: `// Calling .json() strips whitespace, alters bytes, and locks the stream
 export async function POST(req: Request) {
-  const json = await req.json() // 💥 Consumes stream & reorders keys
+  const json = await req.json() // Consumes stream & reorders keys
   const sig = req.headers.get("x-signature")!
 
   // JSON.stringify(json) != original signed raw bytes
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     JSON.stringify(json),
     sig,
     process.env.WEBHOOK_SECRET!
-  ) // 💥 Always fails! Original body stream is also exhausted.
+  ) // Always fails. Original body stream is also exhausted.
 }`,
   },
   right: {
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
 
 export async function POST(req: Request) {
   // Clones & extracts exact raw bytes via req.clone()
-  // req.bodyUsed remains false — original stream is never consumed!
+  // req.bodyUsed remains false — original stream is never consumed
   const result = await verifyWebhookSignature({
     body: req,
     signature: req.headers.get("x-signature")!,
@@ -38,9 +38,9 @@ export async function POST(req: Request) {
     return new Response("Unauthorized", { status: 401 })
   }
 
-  // ✅ Typed payload parsed only AFTER valid HMAC check
+  // Typed payload parsed only AFTER valid HMAC check
   const payload = result.payload
-  // ✅ Downstream logic can still read req without stream errors
+  // Downstream logic can still read req without stream errors
   return Response.json({ received: true })
 }`,
   },
