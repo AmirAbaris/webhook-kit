@@ -2,6 +2,7 @@
   "name": "webhook-kit-docs",
   "version": "0.0.1",
   "description": "Documentation site for webhook-kit (Next.js + shadcn)",
+  "homepage": "https://webhook-kit.vercel.app",
   "type": "module",
   "private": true,
   "scripts": {

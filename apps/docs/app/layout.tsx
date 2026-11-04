@@ -16,12 +16,13 @@ const fontMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE.url),
   title: `${SITE.name} — ${SITE.tagline}`,
   description: SITE.description,
   openGraph: {
     title: `${SITE.name} — ${SITE.tagline}`,
     description: SITE.description,
-    url: SITE.githubUrl,
+    url: SITE.url,
     siteName: SITE.name,
     type: "website",
   },

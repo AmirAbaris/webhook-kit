@@ -16,7 +16,7 @@
     "hono",
     "fastify"
   ],
-  "homepage": "https://github.com/AmirAbaris/webhook-kit#readme",
+  "homepage": "https://webhook-kit.vercel.app",
   "bugs": {
     "url": "https://github.com/AmirAbaris/webhook-kit/issues"
   },

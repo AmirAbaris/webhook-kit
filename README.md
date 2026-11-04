@@ -2,9 +2,12 @@
 
 > **Zero-dependency, edge-compatible webhook signature verification toolkit powered by the Web Cryptography API (`crypto.subtle`).**
 
+[![Live Docs & Playground](https://img.shields.io/badge/docs-webhook--kit.vercel.app-000000?style=flat&logo=vercel)](https://webhook-kit.vercel.app)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](#)
 [![Runtimes](https://img.shields.io/badge/runtimes-Node%20%7C%20Bun%20%7C%20Deno%20%7C%20Edge-purple.svg)](#supported-runtimes)
+
+[**Explore Interactive Docs & Playground →**](https://webhook-kit.vercel.app)
 
 ---
 
