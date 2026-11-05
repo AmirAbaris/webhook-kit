@@ -107,6 +107,8 @@ export function timingSafeEqual(
 - **NEVER parse JSON before verifying signatures**: In frameworks like Next.js, Hono, or Express, parsing JSON reorders keys and strips whitespace, invalidating cryptographic HMAC checks. Always pass the raw `Request` or raw text string.
 - **Constant-Time Verification**: Never compare signatures with `===` or `!==`. Always use `timingSafeEqual` or `verifyWebhookSignature` from `@amirabaris/webhook-kit`.
 - **Zero Node-Only Crypto**: Web standard environments (Cloudflare Workers, Next.js Edge, Bun, Deno) do not support `node:crypto`. Rely on `@amirabaris/webhook-kit` which uses `crypto.subtle`.
+- **Strict Format & Tolerance Hardening**: Validate signature format (e.g. strict 64-char hex or 44-char Base64) before crypto checks. Enforce positive, finite numbers for timestamps and `toleranceSeconds` (`NaN` and negative tolerance are rejected).
+- **Replay Protection & Store**: Deduplicate retries with `store: createInMemoryReplayStore()` or distributed `WebhookReplayStore` adapters (`has`, `set`, optional atomic `setNx`), supporting both string and numeric event IDs.
 - **Conventional Commits**: Follow `type(scope): message` (e.g. `feat(stripe): add tolerance check`).
 
 <!-- webhook-kit-agent-rules:end -->

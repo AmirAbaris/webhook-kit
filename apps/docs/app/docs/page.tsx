@@ -377,7 +377,11 @@ const CUSTOM_PLUGIN_CODE = `import type {
   WebhookVerifyOptions,
   WebhookVerificationResult,
 } from "@amirabaris/webhook-kit"
-import { computeSubtleHmac, timingSafeEqual } from "@amirabaris/webhook-kit"
+import {
+  computeSubtleHmac,
+  timingSafeEqual,
+  SignatureVerificationError,
+} from "@amirabaris/webhook-kit"
 
 // Extensible provider plugin interface
 export const customSmsPlugin: WebhookProviderPlugin<{ messageId: string }> = {

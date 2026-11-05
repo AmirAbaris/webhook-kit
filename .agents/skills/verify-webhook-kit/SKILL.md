@@ -9,10 +9,12 @@ Use this skill to verify `webhook-kit` from a user's perspective across its dual
 
 ## 1. Surface
 
-`webhook-kit` has three primary user surfaces:
+`webhook-kit` has five primary user surfaces:
 1. **The Library Package**: Dual ESM (`dist/index.mjs`) and CommonJS (`dist/index.cjs`) exports consumed in Node, Bun, Deno, and Edge environments.
-2. **Replay & Idempotency Store**: Bounded in-memory store and distributed adapters with atomic concurrency deduplication.
-3. **The Developer CLI**: Zero-dependency binary (`bin/webhook-kit.mjs` or `npx webhook-kit init-agent`).
+2. **Provider Adapters & Universal Route Handler**: First-party providers (`stripe`, `github`, `shopify`), custom plugins, and 3-line declarative route handlers (`createWebhookHandler`).
+3. **Web Cryptography Primitives**: `crypto.subtle` HMAC engine, constant-time `timingSafeEqual`, strict digest sanitizers, and bounded LRU `CryptoKey` caching.
+4. **Replay & Idempotency Store**: Bounded in-memory store and distributed adapters with atomic concurrency deduplication.
+5. **The Developer CLI**: Zero-dependency binary (`bin/webhook-kit.mjs` or `npx webhook-kit init-agent`).
 
 ## 2. Launch & Build
 
@@ -37,7 +39,7 @@ node -v && pnpm -v && pnpm lint
 
 ## 4. Drive & Evidence
 
-Execute the end-to-end verification harness across 6 key dimensions:
+Execute the end-to-end verification harness across 7 key dimensions:
 
 ### A. Zero-Dependency Tarball Sandbox Verification
 Verify that packing the project into a `.tgz` tarball and installing it into a fresh, isolated temporary consumer project installs **only** `webhook-kit` and no phantom dependencies:
@@ -144,6 +146,61 @@ Verify that the `webhook-kit init-agent` CLI safely injects rules into agent fil
 node ./bin/webhook-kit.mjs init-agent --target /tmp/test-verify-agent.md
 grep -q "webhook-kit-agent-rules:start" /tmp/test-verify-agent.md
 rm /tmp/test-verify-agent.md
+```
+
+### G. Cryptographic Primitives & Format Hardening Invariant
+Verify that `timingSafeEqual` enforces timing safety across unequal lengths, `hexToBytes` strictly rejects invalid hex characters with `TypeError`, and Stripe timestamp tolerance rejects non-finite values (`NaN`, `Infinity`):
+
+```bash
+node -e '
+import {
+  computeSubtleHmac,
+  timingSafeEqual,
+  hexToBytes,
+  validateTimestampTolerance,
+  TimestampToleranceError,
+  parseGithubSignature,
+  InvalidSignatureHeaderError,
+} from "./dist/index.mjs";
+
+async function verifyCryptoAndHardening() {
+  // 1. Verify timingSafeEqual on identical strings and length mismatches
+  if (!timingSafeEqual("sig_test_a", "sig_test_a") || timingSafeEqual("sig_test_a", "sig_test_b") || timingSafeEqual("short", "longer_sig")) {
+    throw new Error("timingSafeEqual failed equality or length-mismatch safety");
+  }
+
+  // 2. Verify strict hex validation rejecting invalid characters
+  let caughtHex = false;
+  try {
+    hexToBytes("not_valid_hex_!!!");
+  } catch (err) {
+    if (err instanceof TypeError) caughtHex = true;
+  }
+  if (!caughtHex) throw new Error("hexToBytes did not reject invalid hex with TypeError");
+
+  // 3. Verify timestamp tolerance non-finite rejection
+  let caughtTimestamp = false;
+  try {
+    validateTimestampTolerance(NaN, 300);
+  } catch (err) {
+    if (err instanceof TimestampToleranceError) caughtTimestamp = true;
+  }
+  if (!caughtTimestamp) throw new Error("validateTimestampTolerance did not reject NaN");
+
+  // 4. Verify GitHub strict 64-character hex format
+  let caughtGithub = false;
+  try {
+    parseGithubSignature("sha256=too_short");
+  } catch (err) {
+    if (err instanceof InvalidSignatureHeaderError) caughtGithub = true;
+  }
+  if (!caughtGithub) throw new Error("parseGithubSignature did not reject invalid length");
+
+  console.log("✓ Web Crypto & format hardening invariants verified.");
+}
+
+verifyCryptoAndHardening();
+'
 ```
 
 ## 5. Cleanup

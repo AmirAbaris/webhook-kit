@@ -184,6 +184,24 @@ try {
   }).trim();
   console.log(`CLI executed successfully: ${cliOutput}`);
 
+  // 7.1 Test CLI init-agent command in sandbox
+  console.log("Step 7.1: Verifying CLI init-agent execution...");
+  execSync("npx webhook-kit init-agent --target AGENTS.md", {
+    cwd: tempDir,
+    stdio: "inherit",
+  });
+  const injectedContent = fs.readFileSync(
+    path.join(tempDir, "AGENTS.md"),
+    "utf8",
+  );
+  if (
+    !injectedContent.includes("<!-- webhook-kit-agent-rules:start -->") ||
+    !injectedContent.includes("Strict Format & Tolerance Hardening")
+  ) {
+    throw new Error("CLI init-agent failed to inject expected hardened rules");
+  }
+  console.log("CLI init-agent verified successfully");
+
   console.log("\nPackage smoke test PASSED successfully!");
 } catch (error) {
   console.error("\nPackage smoke test FAILED:", error);

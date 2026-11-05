@@ -248,6 +248,11 @@ const redis = Redis.fromEnv()
 const upstashStore: WebhookReplayStore = {
   has: async (id) => (await redis.exists(\`wh:replay:\${id}\`)) === 1,
   set: async (id, ttl) => await redis.set(\`wh:replay:\${id}\`, "1", { ex: ttl }),
+  // Optional atomic set-if-not-exists for distributed lock-free deduplication
+  setNx: async (id, ttl) => {
+    const res = await redis.set(\`wh:replay:\${id}\`, "1", { ex: ttl, nx: true })
+    return res !== null
+  },
 }
 
 export const POST = createWebhookHandler({
