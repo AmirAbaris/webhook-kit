@@ -46,6 +46,28 @@ export interface WebhookReplayStore {
    * @param ttlSeconds - Time-to-live in seconds before the entry expires.
    */
   set(eventId: string, ttlSeconds: number): unknown | Promise<unknown>;
+
+  /**
+   * Atomically records `eventId` with TTL if it does not already exist in the store (set-if-not-exists).
+   *
+   * @param eventId - Unique webhook event or delivery identifier.
+   * @param ttlSeconds - Time-to-live in seconds before expiration.
+   * @returns `true` if newly recorded, `false` if already present in the store.
+   */
+  setNx?(eventId: string, ttlSeconds: number): boolean | Promise<boolean>;
+
+  /**
+   * Optional method to remove a specific event ID from the store.
+   *
+   * @param eventId - Unique webhook event or delivery identifier.
+   * @returns `true` if the entry existed and was removed, `false` otherwise.
+   */
+  delete?(eventId: string): boolean | Promise<boolean>;
+
+  /**
+   * Optional method to clear all tracked event IDs from the store.
+   */
+  clear?(): void | Promise<void>;
 }
 
 /**

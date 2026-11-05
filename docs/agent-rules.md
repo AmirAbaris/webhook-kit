@@ -68,7 +68,7 @@ export async function POST(req: Request) {
 3. **Replay Attack Mitigation & Idempotency**:
    - Always enforce a timestamp tolerance check when the webhook provider includes a timestamp header (e.g., Stripe `t=...`).
    - Default tolerance: 300 seconds (5 minutes).
-   - For deduplication across retries, pass `store: createInMemoryReplayStore()` or a `WebhookReplayStore` adapter (`has(eventId)` / `set(eventId, ttl)`) backed by Redis, Upstash, or Cloudflare KV.
+   - For deduplication across retries, pass `store: createInMemoryReplayStore()` (includes atomic `setNx` and bounded LRU eviction) or a `WebhookReplayStore` adapter (`has`, `set`, and optional atomic `setNx`) backed by Redis, Upstash, or Cloudflare KV. `webhook-kit` automatically serializes in-flight checks to prevent TOCTOU race conditions under high concurrency.
 
 ---
 

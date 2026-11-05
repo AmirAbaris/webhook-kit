@@ -315,10 +315,14 @@ import { Redis } from "@upstash/redis"
 
 const redis = Redis.fromEnv()
 
-// 6-line distributed adapter for serverless & edge (Next.js Edge / Cloudflare / Vercel)
+// Distributed adapter for serverless & edge with optional atomic setNx
 const upstashStore: WebhookReplayStore = {
   has: async (id) => (await redis.exists(\`wh:replay:\${id}\`)) === 1,
   set: async (id, ttl) => await redis.set(\`wh:replay:\${id}\`, "1", { ex: ttl }),
+  setNx: async (id, ttl) => {
+    const res = await redis.set(\`wh:replay:\${id}\`, "1", { ex: ttl, nx: true })
+    return res !== null
+  },
 }
 
 export const POST = createWebhookHandler({
@@ -338,10 +342,14 @@ import Redis from "ioredis"
 
 const redis = new Redis(process.env.REDIS_URL!)
 
-// Node.js & Bun Redis adapter (ioredis or node-redis)
+// Node.js & Bun Redis adapter with optional atomic setNx
 const redisStore: WebhookReplayStore = {
   has: async (id) => (await redis.exists(\`wh:replay:\${id}\`)) === 1,
   set: async (id, ttl) => await redis.set(\`wh:replay:\${id}\`, "1", "EX", ttl),
+  setNx: async (id, ttl) => {
+    const res = await redis.set(\`wh:replay:\${id}\`, "1", "EX", ttl, "NX")
+    return res === "OK"
+  },
 }
 
 export const POST = createWebhookHandler({
@@ -858,6 +866,10 @@ export default function DocsPage() {
                     )
                   </strong>
                   : Automatically extracts the event ID (from headers like{" "}
+                  <code className="font-mono text-xs text-foreground">
+                    svix-id
+                  </code>
+                  ,{" "}
                   <code className="font-mono text-xs text-foreground">
                     X-GitHub-Delivery
                   </code>

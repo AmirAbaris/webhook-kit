@@ -30,13 +30,17 @@ const UPSTASH_STORE_CODE = `import {
 } from "@amirabaris/webhook-kit"
 import { Redis } from "@upstash/redis"
 
-// 6-line distributed store for serverless & edge (Next.js Edge / Vercel)
+// Distributed store for serverless & edge with optional atomic setNx
 const redis = Redis.fromEnv()
 
 const upstashStore: WebhookReplayStore = {
   has: async (id) => (await redis.exists(\`wh:replay:\${id}\`)) === 1,
   set: async (id, ttl) =>
     await redis.set(\`wh:replay:\${id}\`, "1", { ex: ttl }),
+  setNx: async (id, ttl) => {
+    const res = await redis.set(\`wh:replay:\${id}\`, "1", { ex: ttl, nx: true })
+    return res !== null
+  },
 }
 
 export const POST = createWebhookHandler({
@@ -131,6 +135,10 @@ export function StoreSection() {
               webhook-kit
             </code>{" "}
             automatically extracts event delivery IDs from standard headers (
+            <code className="rounded-xs bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+              svix-id
+            </code>
+            ,{" "}
             <code className="rounded-xs bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
               X-GitHub-Delivery
             </code>

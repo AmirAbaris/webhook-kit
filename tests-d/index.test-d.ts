@@ -455,6 +455,9 @@ expectType<InMemoryReplayStore>(memoryStore);
 expectAssignable<WebhookReplayStore>(memoryStore);
 expectType<boolean>(memoryStore.has("evt_1"));
 expectType<void>(memoryStore.set("evt_1", 300));
+expectType<boolean>(memoryStore.setNx("evt_1", 300));
+expectType<boolean>(memoryStore.delete("evt_1"));
+expectType<void>(memoryStore.clear());
 expectType<number>(memoryStore.prune());
 
 expectAssignable<InMemoryReplayStoreOptions>({

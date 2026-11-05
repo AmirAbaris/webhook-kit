@@ -543,13 +543,14 @@ Replay attacks occur when an attacker (or a retry storm) replays a valid webhook
 1. **Timestamp Tolerance**:
    - **Stripe**: Parses `t=...` from `Stripe-Signature` and validates against `toleranceSeconds` (default: 300s).
    - **Generic**: Automatically inspects `x-webhook-timestamp` (or explicit `timestamp` option) and validates against `toleranceSeconds`.
-2. **Idempotency / Replay Store (`store: { has(eventId), set(eventId, ttl) }`)**:
-   - Pass any synchronous or asynchronous store implementing `WebhookReplayStore` (`has(eventId)` and `set(eventId, ttlSeconds)`).
-   - `webhook-kit` automatically extracts the event ID from `options.eventId`, standard delivery headers (`X-GitHub-Delivery`, `X-Shopify-Webhook-Id`, `X-Webhook-Id`), or `payload.id` **after** cryptographic HMAC verification succeeds, and rejects duplicates with `ReplayAttackError` (`409 Conflict` in `createWebhookHandler`).
+2. **Idempotency / Replay Store (`store: { has(eventId), set(eventId, ttl), setNx?(eventId, ttl) }`)**:
+   - Pass any synchronous or asynchronous store implementing `WebhookReplayStore`.
+   - Supports atomic `setNx` (_set-if-not-exists_) to eliminate race conditions under concurrent deliveries. If `setNx` is omitted, `webhook-kit` automatically serializes in-flight checks.
+   - `webhook-kit` automatically extracts the event ID from `options.eventId`, standard delivery headers (`svix-id`, `webhook-id`, `X-GitHub-Delivery`, `X-Shopify-Webhook-Id`, `X-Webhook-Id`), or `payload.id` **after** cryptographic HMAC verification succeeds, and rejects duplicates with `ReplayAttackError` (`409 Conflict` in `createWebhookHandler`).
 
 #### Default In-Memory TTL Store (`createInMemoryReplayStore`)
 
-For single-instance Node, Bun, or Deno servers, use the built-in zero-dependency TTL store with automatic expiration and LRU capacity bounding:
+For single-instance Node, Bun, or Deno servers, use the built-in zero-dependency TTL store with atomic `setNx`, automatic expiration, and LRU capacity bounding:
 
 ```ts
 import {
@@ -574,22 +575,34 @@ export const POST = createWebhookHandler({
 
 #### Distributed Store Hooks (Redis / Upstash / Cloudflare KV)
 
-For multi-instance or serverless edge deployments, wire a 6-line `WebhookReplayStore` adapter into Redis, Upstash, or Cloudflare Workers KV:
+For multi-instance or serverless edge deployments, wire a lightweight `WebhookReplayStore` adapter into Redis, Upstash, or Cloudflare Workers KV. Provide `setNx` (e.g. Redis `SET key value EX ttl NX`) for hardware-level atomic de-duplication:
 
 ```ts
 import type { WebhookReplayStore } from "@amirabaris/webhook-kit";
 
-// 1. Node / Bun Redis (ioredis or node-redis)
+// 1. Node / Bun Redis (ioredis or node-redis) with atomic setNx
 const redisStore: WebhookReplayStore = {
   has: async (id) => (await redis.exists(`wh:replay:${id}`)) === 1,
   set: async (id, ttl) => await redis.set(`wh:replay:${id}`, "1", "EX", ttl),
+  // Optional atomic set-if-not-exists for distributed lock-free deduplication
+  setNx: async (id, ttl) => {
+    const res = await redis.set(`wh:replay:${id}`, "1", "EX", ttl, "NX");
+    return res === "OK";
+  },
 };
 
-// 2. Upstash Redis (@upstash/redis — Edge & Next.js)
+// 2. Upstash Redis (@upstash/redis — Edge & Next.js) with atomic setNx
 const upstashStore: WebhookReplayStore = {
   has: async (id) => (await upstash.exists(`wh:replay:${id}`)) === 1,
   set: async (id, ttl) =>
     await upstash.set(`wh:replay:${id}`, "1", { ex: ttl }),
+  setNx: async (id, ttl) => {
+    const res = await upstash.set(`wh:replay:${id}`, "1", {
+      ex: ttl,
+      nx: true,
+    });
+    return res !== null;
+  },
 };
 
 // 3. Cloudflare Workers KV ( passed via Hono / Worker env )
