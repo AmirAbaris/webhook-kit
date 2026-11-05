@@ -416,14 +416,14 @@ const ERROR_ROWS = [
     code: "SIGNATURE_VERIFICATION_FAILED",
     status: "401",
     cause:
-      "HMAC digest mismatch or wrong signing secret. Check that your secret is configured correctly.",
+      "HMAC digest mismatch, wrong signing secret, or invalid digest format (e.g. non-hex characters or wrong length).",
   },
   {
     errorClass: "TimestampToleranceError",
     code: "TIMESTAMP_TOLERANCE_EXCEEDED",
     status: "401",
     cause:
-      "Payload timestamp outside toleranceSeconds window. Protects against replay attacks and clock drift.",
+      "Payload timestamp outside toleranceSeconds window, or non-finite timestamp/tolerance value (e.g. NaN or Infinity).",
   },
   {
     errorClass: "ReplayAttackError",
@@ -855,7 +855,13 @@ export default function DocsPage() {
                   <code className="font-mono text-xs text-foreground">
                     toleranceSeconds
                   </code>{" "}
-                  (default 300s).
+                  (default 300s). Rejects non-finite values (
+                  <code className="font-mono text-xs text-foreground">NaN</code>
+                  ,{" "}
+                  <code className="font-mono text-xs text-foreground">
+                    Infinity
+                  </code>
+                  ) and negative values to prevent validation bypass.
                 </li>
                 <li>
                   <strong className="text-foreground">
@@ -881,7 +887,8 @@ export default function DocsPage() {
                   <code className="font-mono text-xs text-foreground">
                     payload.id
                   </code>
-                  ) and rejects duplicates with{" "}
+                  ) with support for string and numeric IDs (such as Shopify
+                  order IDs), and rejects duplicates with{" "}
                   <code className="font-mono text-xs text-foreground">
                     409 Conflict
                   </code>{" "}
@@ -1028,7 +1035,7 @@ export default function DocsPage() {
                         </code>{" "}
                         (timestamp{" "}
                         <code className="font-mono text-[11px]">t=...</code> +
-                        HMAC{" "}
+                        normalized hex HMAC{" "}
                         <code className="font-mono text-[11px]">v1=...</code>),
                         typed{" "}
                         <code className="font-mono text-[11px]">
@@ -1045,11 +1052,11 @@ export default function DocsPage() {
                         <code className="font-mono text-[11px]">
                           x-hub-signature-256
                         </code>{" "}
-                        (
+                        (strict 64-char hex{" "}
                         <code className="font-mono text-[11px]">
                           sha256=...
-                        </code>{" "}
-                        hex), auto-extracts{" "}
+                        </code>
+                        ), auto-extracts{" "}
                         <code className="font-mono text-[11px]">
                           x-github-delivery
                         </code>
@@ -1068,7 +1075,7 @@ export default function DocsPage() {
                         <code className="font-mono text-[11px]">
                           x-shopify-hmac-sha256
                         </code>{" "}
-                        (Base64 HMAC-SHA256), auto-extracts{" "}
+                        (strict 44-char Base64 HMAC-SHA256), auto-extracts{" "}
                         <code className="font-mono text-[11px]">
                           x-shopify-webhook-id
                         </code>

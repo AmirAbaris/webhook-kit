@@ -65,10 +65,15 @@ export async function POST(req: Request) {
 2. **Web Cryptography API**:
    - Use `globalThis.crypto.subtle.importKey(...)` and `globalThis.crypto.subtle.sign(...)`.
    - Never import `node:crypto` into `src/`.
-3. **Replay Attack Mitigation & Idempotency**:
+3. **Strict Digest & Signature Format Validation**:
+   - Validate signature structure and length before cryptographic checks (e.g., GitHub signatures must be exactly 64 hex characters `^[0-9a-fA-F]{64}$`; Shopify signatures must be 44 Base64 characters).
+   - Hex decoding (`hexToBytes`) must strictly reject non-hex characters with a `TypeError` rather than silently zero-filling or coercing.
+4. **Replay Attack Mitigation & Idempotency**:
    - Always enforce a timestamp tolerance check when the webhook provider includes a timestamp header (e.g., Stripe `t=...`).
    - Default tolerance: 300 seconds (5 minutes).
+   - Both `timestamp` and `toleranceSeconds` must be positive, finite numbers. Reject `NaN`, `Infinity`, or negative values immediately with `TimestampToleranceError`.
    - For deduplication across retries, pass `store: createInMemoryReplayStore()` (includes atomic `setNx` and bounded LRU eviction) or a `WebhookReplayStore` adapter (`has`, `set`, and optional atomic `setNx`) backed by Redis, Upstash, or Cloudflare KV. `webhook-kit` automatically serializes in-flight checks to prevent TOCTOU race conditions under high concurrency.
+   - Replay stores and `checkAndRecordReplay` must support both string and numeric `eventId` values (e.g. Shopify numeric order IDs) without skipping idempotency checks.
 
 ---
 
@@ -146,6 +151,9 @@ Before generating or approving code:
 - [ ] Is raw body retained without intermediate JSON parsing?
 - [ ] Are timing-safe comparisons used for all HMAC/signature checks?
 - [ ] Is the code free from `node:crypto` imports in universal source code?
+- [ ] Are signatures and digests strictly validated for length and character sets before comparison?
+- [ ] Are timestamps and tolerance values validated as positive, finite numbers (rejecting `NaN` and `Infinity`)?
+- [ ] Does replay protection and event ID resolution support both string and numeric IDs without skipping?
 - [ ] Are TypeScript types strict (`noImplicitAny`, proper generics on `verifyWebhookSignature<T>`)?
 - [ ] Is test coverage included with both valid signatures and tampered payload assertions?
 - [ ] Does the commit message strictly follow Conventional Commits?

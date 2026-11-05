@@ -525,14 +525,14 @@ try {
 
 All errors inherit from `WebhookKitError` and include machine-readable `code` properties:
 
-| Error Class                   | `code`                          | Root Cause & Mitigation                                                                            |
-| ----------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `SignatureVerificationError`  | `SIGNATURE_VERIFICATION_FAILED` | HMAC digest mismatch or missing signing secret. Check that your webhook signing secret is correct. |
-| `TimestampToleranceError`     | `TIMESTAMP_TOLERANCE_EXCEEDED`  | Payload timestamp exceeds `toleranceSeconds` window. Protects against replay attacks.              |
-| `ReplayAttackError`           | `WEBHOOK_REPLAY_DETECTED`       | Event ID already exists in `store`. Prevents duplicate webhook processing within the TTL window.   |
-| `InvalidSignatureHeaderError` | `INVALID_SIGNATURE_HEADER`      | Header is missing, empty, or lacks required prefix (`sha256=`, `t=...,v1=...`).                    |
-| `PayloadExtractionError`      | `PAYLOAD_EXTRACTION_FAILED`     | Body is an unsupported format or input stream was prematurely closed.                              |
-| `WebhookKitError`             | `WEBHOOK_KIT_ERROR`             | Base class for all webhook-kit errors.                                                             |
+| Error Class                   | `code`                          | Root Cause & Mitigation                                                                          |
+| ----------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `SignatureVerificationError`  | `SIGNATURE_VERIFICATION_FAILED` | HMAC digest mismatch, missing secret, or invalid format (e.g., non-hex, wrong length).           |
+| `TimestampToleranceError`     | `TIMESTAMP_TOLERANCE_EXCEEDED`  | Payload timestamp is outside `toleranceSeconds` window, or is non-finite (`NaN`/`Infinity`).     |
+| `ReplayAttackError`           | `WEBHOOK_REPLAY_DETECTED`       | Event ID already exists in `store`. Prevents duplicate webhook processing within the TTL window. |
+| `InvalidSignatureHeaderError` | `INVALID_SIGNATURE_HEADER`      | Header is missing, empty, or lacks required prefix (`sha256=`, `t=...,v1=...`).                  |
+| `PayloadExtractionError`      | `PAYLOAD_EXTRACTION_FAILED`     | Body is an unsupported format or input stream was prematurely closed.                            |
+| `WebhookKitError`             | `WEBHOOK_KIT_ERROR`             | Base class for all webhook-kit errors.                                                           |
 
 ### Replay Attack Mitigation & Idempotency Store (`WebhookReplayStore`)
 
@@ -541,12 +541,14 @@ Replay attacks occur when an attacker (or a retry storm) replays a valid webhook
 `webhook-kit` combines two layers of replay protection:
 
 1. **Timestamp Tolerance**:
-   - **Stripe**: Parses `t=...` from `Stripe-Signature` and validates against `toleranceSeconds` (default: 300s).
+   - **Stripe**: Parses `t=...` from `Stripe-Signature` and validates against `toleranceSeconds` (default: 300s). Fractional timestamps are safely floored.
    - **Generic**: Automatically inspects `x-webhook-timestamp` (or explicit `timestamp` option) and validates against `toleranceSeconds`.
+   - **Strict Numeric Hardening**: Both `timestamp` and `toleranceSeconds` must be positive, finite numbers. Non-finite values (`NaN`, `Infinity`, `-Infinity`) or negative numbers immediately reject with `TimestampToleranceError` to prevent tolerance check bypasses.
 2. **Idempotency / Replay Store (`store: { has(eventId), set(eventId, ttl), setNx?(eventId, ttl) }`)**:
    - Pass any synchronous or asynchronous store implementing `WebhookReplayStore`.
    - Supports atomic `setNx` (_set-if-not-exists_) to eliminate race conditions under concurrent deliveries. If `setNx` is omitted, `webhook-kit` automatically serializes in-flight checks.
    - `webhook-kit` automatically extracts the event ID from `options.eventId`, standard delivery headers (`svix-id`, `webhook-id`, `X-GitHub-Delivery`, `X-Shopify-Webhook-Id`, `X-Webhook-Id`), or `payload.id` **after** cryptographic HMAC verification succeeds, and rejects duplicates with `ReplayAttackError` (`409 Conflict` in `createWebhookHandler`).
+   - Supports both string and numeric event IDs (e.g. Shopify numeric webhook IDs) seamlessly.
 
 #### Default In-Memory TTL Store (`createInMemoryReplayStore`)
 
