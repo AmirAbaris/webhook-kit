@@ -110,6 +110,68 @@ describe("InMemoryReplayStore & createInMemoryReplayStore", () => {
     store.clear();
     expect(store.size).toBe(0);
   });
+
+  test("supports atomic setNx, returning true for new entries and false for existing or unexpired entries", () => {
+    let currentMs = 1_700_000_000_000;
+    const store = createInMemoryReplayStore({
+      defaultTtlSeconds: 50,
+      now: () => currentMs,
+    });
+
+    expect(store.setNx("evt_atom_1", 30)).toBe(true);
+    expect(store.has("evt_atom_1")).toBe(true);
+
+    // Duplicate call returns false and does not reset expiration
+    expect(store.setNx("evt_atom_1", 100)).toBe(false);
+
+    // Advance 31 seconds: expired
+    currentMs += 31_000;
+    expect(store.has("evt_atom_1")).toBe(false);
+
+    // After expiration, setNx succeeds again
+    expect(store.setNx("evt_atom_1", 30)).toBe(true);
+  });
+
+  test("defensively sanitizes invalid constructor options and ignores invalid eventId keys", () => {
+    const invalidStore = new InMemoryReplayStore({
+      maxSize: -10,
+      defaultTtlSeconds: Number.NaN,
+    });
+
+    expect(invalidStore.capacity).toBe(10_000);
+
+    // Non-string or empty keys are ignored gracefully without throwing
+    invalidStore.set("");
+    expect(invalidStore.has("")).toBe(false);
+    expect(invalidStore.delete("")).toBe(false);
+    expect(invalidStore.size).toBe(0);
+
+    // @ts-expect-error - testing runtime defense against invalid types
+    invalidStore.set(null);
+    // @ts-expect-error - testing runtime defense against invalid types
+    expect(invalidStore.has(null)).toBe(false);
+    // @ts-expect-error - testing runtime defense against invalid types
+    expect(invalidStore.delete(null)).toBe(false);
+  });
+
+  test("throttles full prune scans to once per second under continuous maximum capacity", () => {
+    let currentMs = 1_700_000_000_000;
+    const store = createInMemoryReplayStore({
+      maxSize: 2,
+      now: () => currentMs,
+    });
+
+    store.set("evt_1", 100);
+    store.set("evt_2", 100);
+    expect(store.size).toBe(2);
+
+    // Rapid inserts within 100ms exceed capacity without triggering redundant O(N) full prune iterations
+    currentMs += 50;
+    store.set("evt_3", 100);
+    expect(store.size).toBe(2);
+    expect(store.has("evt_1")).toBe(false);
+    expect(store.has("evt_3")).toBe(true);
+  });
 });
 
 describe("resolveWebhookEventId & checkAndRecordReplay", () => {
@@ -195,6 +257,83 @@ describe("resolveWebhookEventId & checkAndRecordReplay", () => {
     expect(replayCheck).toBeInstanceOf(ReplayAttackError);
     expect(replayCheck?.code).toBe("WEBHOOK_REPLAY_DETECTED");
     expect(replayCheck?.eventId).toBe("evt_async_1");
+  });
+
+  test("prevents TOCTOU race conditions under concurrent requests using InMemoryReplayStore", async () => {
+    const store = createInMemoryReplayStore();
+    const eventId = "evt_race_condition_mem";
+
+    // Two concurrent requests hitting the store simultaneously
+    const [res1, res2] = await Promise.all([
+      checkAndRecordReplay({ store, eventId, storeTtlSeconds: 300 }),
+      checkAndRecordReplay({ store, eventId, storeTtlSeconds: 300 }),
+    ]);
+
+    // Exactly one must succeed (null) and the other must be rejected (ReplayAttackError)
+    const successCount = (res1 === null ? 1 : 0) + (res2 === null ? 1 : 0);
+    const errorCount =
+      (res1 instanceof ReplayAttackError ? 1 : 0) +
+      (res2 instanceof ReplayAttackError ? 1 : 0);
+
+    expect(successCount).toBe(1);
+    expect(errorCount).toBe(1);
+  });
+
+  test("prevents TOCTOU race conditions under concurrent requests with async stores via in-flight serialization", async () => {
+    const kv = new Set<string>();
+
+    // Simulated async store with 10ms network delay and no atomic setNx
+    const slowAsyncStore: WebhookReplayStore = {
+      async has(eventId) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        return kv.has(eventId);
+      },
+      async set(eventId) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        kv.add(eventId);
+      },
+    };
+
+    const eventId = "evt_race_async_kv";
+
+    const [resA, resB] = await Promise.all([
+      checkAndRecordReplay({
+        store: slowAsyncStore,
+        eventId,
+        storeTtlSeconds: 60,
+      }),
+      checkAndRecordReplay({
+        store: slowAsyncStore,
+        eventId,
+        storeTtlSeconds: 60,
+      }),
+    ]);
+
+    const successCount = (resA === null ? 1 : 0) + (resB === null ? 1 : 0);
+    const errorCount =
+      (resA instanceof ReplayAttackError ? 1 : 0) +
+      (resB instanceof ReplayAttackError ? 1 : 0);
+
+    expect(successCount).toBe(1);
+    expect(errorCount).toBe(1);
+  });
+
+  test("resolves svix-id header and numeric explicit event IDs while gracefully ignoring array payloads", () => {
+    expect(
+      resolveWebhookEventId({
+        headers: { "svix-id": "msg_2d3wE93" },
+      }),
+    ).toBe("msg_2d3wE93");
+
+    // @ts-expect-error - testing runtime defense against numeric explicit eventId
+    expect(resolveWebhookEventId({ eventId: 987654321 })).toBe("987654321");
+
+    expect(
+      resolveWebhookEventId({
+        payload: [{ id: "array_item" }],
+      }),
+    ).toBeUndefined();
   });
 });
 

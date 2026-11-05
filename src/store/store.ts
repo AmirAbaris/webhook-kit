@@ -13,11 +13,56 @@ export const DEFAULT_REPLAY_STORE_TTL_SECONDS = 300;
 export const GENERIC_EVENT_ID_HEADERS = [
   "x-webhook-id",
   "webhook-id",
+  "svix-id",
   "x-github-delivery",
   "x-shopify-webhook-id",
   "x-event-id",
   "x-idempotency-key",
 ] as const;
+
+/**
+ * Tracks in-flight replay check promises per store instance to prevent TOCTOU race conditions
+ * during concurrent duplicate deliveries across stores that only implement `has` and `set`.
+ */
+const inFlightPerStore = new WeakMap<
+  WebhookReplayStore,
+  Map<string, Promise<ReplayAttackError | null>>
+>();
+
+/**
+ * Sanitizes and bounds the maximum capacity for `InMemoryReplayStore`.
+ *
+ * @param size - Candidate capacity option.
+ * @returns Positive bounded integer capacity.
+ */
+function sanitizeCapacity(size: number | undefined): number {
+  return typeof size === "number" && Number.isFinite(size) && size > 0
+    ? Math.floor(size)
+    : DEFAULT_REPLAY_STORE_MAX_SIZE;
+}
+
+/**
+ * Sanitizes and bounds the default TTL for `InMemoryReplayStore`.
+ *
+ * @param ttl - Candidate default TTL option.
+ * @returns Positive finite TTL in seconds.
+ */
+function sanitizeTtl(ttl: number | undefined): number {
+  return typeof ttl === "number" && Number.isFinite(ttl) && ttl > 0
+    ? ttl
+    : DEFAULT_REPLAY_STORE_TTL_SECONDS;
+}
+
+/**
+ * Resolves the effective TTL for a store insert from explicit TTL or default fallback.
+ *
+ * @param ttl - Explicit TTL in seconds.
+ * @param defaultTtl - Default TTL fallback.
+ * @returns Resolved finite TTL in seconds.
+ */
+function resolveInsertTtl(ttl: number | undefined, defaultTtl: number): number {
+  return typeof ttl === "number" && Number.isFinite(ttl) ? ttl : defaultTtl;
+}
 
 /**
  * Default in-memory TTL replay store backed by a JavaScript `Map`.
@@ -33,10 +78,11 @@ export class InMemoryReplayStore implements WebhookReplayStore {
 
   private readonly entries = new Map<string, number>();
 
+  private lastPruneMs = 0;
+
   constructor(options: InMemoryReplayStoreOptions = {}) {
-    this.maxSize = options.maxSize ?? DEFAULT_REPLAY_STORE_MAX_SIZE;
-    this.defaultTtlSeconds =
-      options.defaultTtlSeconds ?? DEFAULT_REPLAY_STORE_TTL_SECONDS;
+    this.maxSize = sanitizeCapacity(options.maxSize);
+    this.defaultTtlSeconds = sanitizeTtl(options.defaultTtlSeconds);
     this.now = options.now ?? Date.now;
   }
 
@@ -47,6 +93,10 @@ export class InMemoryReplayStore implements WebhookReplayStore {
    * @returns `true` if `eventId` is present and unexpired, `false` otherwise.
    */
   has(eventId: string): boolean {
+    if (typeof eventId !== "string" || eventId.length === 0) {
+      return false;
+    }
+
     const expiresAt = this.entries.get(eventId);
 
     if (expiresAt === undefined) {
@@ -71,9 +121,11 @@ export class InMemoryReplayStore implements WebhookReplayStore {
    * @param ttlSeconds - Time-to-live in seconds before expiration.
    */
   set(eventId: string, ttlSeconds: number = this.defaultTtlSeconds): void {
-    const effectiveTtl = Number.isFinite(ttlSeconds)
-      ? ttlSeconds
-      : this.defaultTtlSeconds;
+    if (typeof eventId !== "string" || eventId.length === 0) {
+      return;
+    }
+
+    const effectiveTtl = resolveInsertTtl(ttlSeconds, this.defaultTtlSeconds);
 
     if (effectiveTtl <= 0) {
       this.entries.delete(eventId);
@@ -81,13 +133,25 @@ export class InMemoryReplayStore implements WebhookReplayStore {
       return;
     }
 
-    if (this.entries.has(eventId)) {
-      this.entries.delete(eventId);
-    } else if (this.entries.size >= this.maxSize) {
-      this.evictExpiredOrOldest();
+    this.prepareInsertSlot(eventId);
+    this.entries.set(eventId, this.now() + effectiveTtl * 1000);
+  }
+
+  /**
+   * Atomically records `eventId` with TTL if it does not already exist in the store (set-if-not-exists).
+   *
+   * @param eventId - Unique webhook event or delivery identifier.
+   * @param ttlSeconds - Time-to-live in seconds before expiration.
+   * @returns `true` if newly recorded, `false` if already present in the store.
+   */
+  setNx(eventId: string, ttlSeconds: number = this.defaultTtlSeconds): boolean {
+    if (this.has(eventId)) {
+      return false;
     }
 
-    this.entries.set(eventId, this.now() + effectiveTtl * 1000);
+    this.set(eventId, ttlSeconds);
+
+    return true;
   }
 
   /**
@@ -97,6 +161,10 @@ export class InMemoryReplayStore implements WebhookReplayStore {
    * @returns `true` if the entry existed and was removed.
    */
   delete(eventId: string): boolean {
+    if (typeof eventId !== "string" || eventId.length === 0) {
+      return false;
+    }
+
     return this.entries.delete(eventId);
   }
 
@@ -140,8 +208,59 @@ export class InMemoryReplayStore implements WebhookReplayStore {
     return this.maxSize;
   }
 
+  /**
+   * Prepares a map slot for insertion by evicting an existing key or pruning capacity.
+   *
+   * @param eventId - Candidate event ID key.
+   */
+  private prepareInsertSlot(eventId: string): void {
+    if (this.entries.has(eventId)) {
+      this.entries.delete(eventId);
+
+      return;
+    }
+
+    if (this.entries.size >= this.maxSize) {
+      this.evictExpiredOrOldest();
+    }
+  }
+
+  /**
+   * Fast-path check from the head of the insertion-ordered Map to purge expired entries.
+   *
+   * @param currentMs - Current time in milliseconds.
+   */
+  private evictHeadExpired(currentMs: number): void {
+    for (const [key, expiresAt] of this.entries) {
+      if (currentMs >= expiresAt) {
+        this.entries.delete(key);
+
+        if (this.entries.size < this.maxSize) {
+          return;
+        }
+      } else {
+        // WHY: Map entries are insertion-ordered. If the head entry is not expired,
+        // entries with identical or later expiration dates will not be expired either.
+        break;
+      }
+    }
+  }
+
   private evictExpiredOrOldest(): void {
-    this.prune();
+    const currentMs = this.now();
+
+    this.evictHeadExpired(currentMs);
+
+    // WHY: Throttle full O(N) map scans to at most once per second under sustained load
+    // so bursts of new events at maximum capacity do not stall the JavaScript event loop.
+    const shouldPrune =
+      this.entries.size >= this.maxSize &&
+      (currentMs - this.lastPruneMs >= 1000 || currentMs < this.lastPruneMs);
+
+    if (shouldPrune) {
+      this.lastPruneMs = currentMs;
+      this.prune();
+    }
 
     if (this.entries.size < this.maxSize) {
       return;
@@ -195,6 +314,36 @@ function findHeaderValue(
 }
 
 /**
+ * Determines whether a candidate value is a non-null, non-array object record.
+ *
+ * @param value - Candidate value.
+ * @returns `true` if value is a plain object record.
+ */
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Parses a raw JSON string into a record object, ignoring non-object outputs.
+ *
+ * @param rawBody - Raw body text.
+ * @returns Parsed object record or null.
+ */
+function parseJsonRecord(rawBody?: string): Record<string, unknown> | null {
+  if (typeof rawBody !== "string" || rawBody.length === 0) {
+    return null;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(rawBody);
+
+    return isPlainRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Resolves a record object from either an already-parsed payload or a raw JSON string.
  *
  * @param payload - Parsed payload value.
@@ -205,23 +354,11 @@ function resolvePayloadObject(
   payload: unknown,
   rawBody?: string,
 ): Record<string, unknown> | null {
-  if (typeof payload === "object" && payload !== null) {
-    return payload as Record<string, unknown>;
+  if (isPlainRecord(payload)) {
+    return payload;
   }
 
-  if (!rawBody) {
-    return null;
-  }
-
-  try {
-    const parsed: unknown = JSON.parse(rawBody);
-
-    return typeof parsed === "object" && parsed !== null
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
+  return parseJsonRecord(rawBody);
 }
 
 /**
@@ -273,6 +410,26 @@ function findHeaderInRequest(
 }
 
 /**
+ * Sanitizes an explicitly provided `eventId` option into a non-empty string.
+ *
+ * @param eventId - Candidate event ID.
+ * @returns Trimmed event ID or undefined.
+ */
+function resolveExplicitEventId(eventId?: unknown): string | undefined {
+  if (typeof eventId === "string") {
+    const trimmed = eventId.trim();
+
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  if (typeof eventId === "number" && Number.isFinite(eventId)) {
+    return String(eventId);
+  }
+
+  return undefined;
+}
+
+/**
  * Resolves the unique webhook event ID from explicit options, delivery headers, or payload `id`.
  *
  * @param options - Source options containing explicit `eventId`, `headers`, `body`, `payload`, and `rawBody`.
@@ -289,7 +446,7 @@ export function resolveWebhookEventId(
   },
   headerCandidates: readonly string[] = GENERIC_EVENT_ID_HEADERS,
 ): string | undefined {
-  const explicitId = options.eventId?.trim();
+  const explicitId = resolveExplicitEventId(options.eventId);
 
   if (explicitId) {
     return explicitId;
@@ -317,11 +474,19 @@ function resolveEffectiveTtl(
   storeTtlSeconds?: number,
   toleranceSeconds?: number,
 ): number {
-  if (storeTtlSeconds !== undefined && storeTtlSeconds > 0) {
+  if (
+    typeof storeTtlSeconds === "number" &&
+    Number.isFinite(storeTtlSeconds) &&
+    storeTtlSeconds > 0
+  ) {
     return storeTtlSeconds;
   }
 
-  if (toleranceSeconds !== undefined && toleranceSeconds > 0) {
+  if (
+    typeof toleranceSeconds === "number" &&
+    Number.isFinite(toleranceSeconds) &&
+    toleranceSeconds > 0
+  ) {
     return toleranceSeconds;
   }
 
@@ -329,7 +494,74 @@ function resolveEffectiveTtl(
 }
 
 /**
+ * Checks and records an event ID using a store's basic `has` and `set` primitives.
+ *
+ * @param store - Webhook replay store.
+ * @param eventId - Resolved event identifier.
+ * @param ttlSeconds - Time-to-live in seconds.
+ * @returns `ReplayAttackError` if already seen, or `null` on success.
+ */
+async function executeStoreCheckAndRecord(
+  store: WebhookReplayStore,
+  eventId: string,
+  ttlSeconds: number,
+): Promise<ReplayAttackError | null> {
+  const alreadySeen = await store.has(eventId);
+
+  if (alreadySeen) {
+    return new ReplayAttackError(eventId);
+  }
+
+  await store.set(eventId, ttlSeconds);
+
+  return null;
+}
+
+/**
+ * Synchronizes concurrent in-flight checks for the same `eventId` across stores lacking atomic operations.
+ *
+ * @param store - Webhook replay store.
+ * @param eventId - Resolved event identifier.
+ * @param ttlSeconds - Time-to-live in seconds.
+ * @returns `ReplayAttackError` if duplicate or already tracked, or `null` on success.
+ */
+async function handleInFlightReplayCheck(
+  store: WebhookReplayStore,
+  eventId: string,
+  ttlSeconds: number,
+): Promise<ReplayAttackError | null> {
+  let storeInFlight = inFlightPerStore.get(store);
+
+  if (!storeInFlight) {
+    storeInFlight = new Map();
+    inFlightPerStore.set(store, storeInFlight);
+  }
+
+  const existing = storeInFlight.get(eventId);
+
+  if (existing) {
+    // WHY: A concurrent verification is already in flight for this exact event ID.
+    // If that prior check succeeds, this concurrent invocation is a duplicate replay.
+    const result = await existing;
+
+    return result === null ? new ReplayAttackError(eventId) : result;
+  }
+
+  const checkPromise = executeStoreCheckAndRecord(store, eventId, ttlSeconds);
+
+  storeInFlight.set(eventId, checkPromise);
+
+  try {
+    return await checkPromise;
+  } finally {
+    storeInFlight.delete(eventId);
+  }
+}
+
+/**
  * Verifies that `eventId` has not already been seen in `store`, and records it with a TTL if unseen.
+ * Automatically leverages atomic `setNx` when supported, or serializes in-flight checks to prevent
+ * TOCTOU race conditions under high concurrency.
  *
  * @param options - Store instance, resolved `eventId`, and TTL configuration.
  * @returns `ReplayAttackError` if `eventId` is already present in `store`, or `null` if unseen / no store.
@@ -339,14 +571,14 @@ export async function checkAndRecordReplay(
 ): Promise<ReplayAttackError | null> {
   const { store, eventId } = options;
 
-  if (!store || !eventId) {
+  if (!store || typeof eventId !== "string") {
     return null;
   }
 
-  const alreadySeen = await store.has(eventId);
+  const trimmedId = eventId.trim();
 
-  if (alreadySeen) {
-    return new ReplayAttackError(eventId);
+  if (!trimmedId) {
+    return null;
   }
 
   const ttlSeconds = resolveEffectiveTtl(
@@ -354,7 +586,13 @@ export async function checkAndRecordReplay(
     options.toleranceSeconds,
   );
 
-  await store.set(eventId, ttlSeconds);
+  // WHY: Prefer atomic set-if-not-exists when provided by the store (e.g. InMemoryReplayStore or Redis SET NX)
+  // to eliminate race conditions between checking existence and recording the key.
+  if (typeof store.setNx === "function") {
+    const recorded = await store.setNx(trimmedId, ttlSeconds);
 
-  return null;
+    return recorded ? null : new ReplayAttackError(trimmedId);
+  }
+
+  return handleInFlightReplayCheck(store, trimmedId, ttlSeconds);
 }
