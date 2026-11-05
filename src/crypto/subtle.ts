@@ -24,6 +24,18 @@ export interface SubtleHmacOptions {
 }
 
 /**
+ * Sanitizes and bounds the maximum capacity for `CryptoKeyLruCache`.
+ *
+ * @param size - Candidate capacity option.
+ * @returns Positive bounded integer capacity.
+ */
+function sanitizeCacheCapacity(size: number | undefined): number {
+  return typeof size === "number" && Number.isFinite(size) && size > 0
+    ? Math.floor(size)
+    : 256;
+}
+
+/**
  * Lightweight LRU (Least Recently Used) cache backed by a JavaScript `Map`.
  * Reuses compiled WebCrypto keys across concurrent requests and evicts the
  * oldest entries when capacity is reached.
@@ -34,7 +46,7 @@ export class CryptoKeyLruCache {
   private readonly map = new Map<string, Promise<CryptoKey>>();
 
   constructor(maxSize = 256) {
-    this.maxSize = maxSize;
+    this.maxSize = sanitizeCacheCapacity(maxSize);
   }
 
   get(key: string): Promise<CryptoKey> | undefined {
@@ -170,7 +182,9 @@ function getOrCreateCryptoKey(
 
   // Evict immediately on error to avoid caching rejected promises
   keyPromise.catch(() => {
-    cache.delete(cacheKey);
+    if (cache.get(cacheKey) === keyPromise) {
+      cache.delete(cacheKey);
+    }
   });
 
   cache.set(cacheKey, keyPromise);
@@ -418,12 +432,21 @@ export function bytesToHex(bytes: Uint8Array): string {
  */
 export function hexToBytes(hex: string): Uint8Array {
   const cleanHex = hex.startsWith("0x") ? hex.slice(2) : hex;
+
+  if (!/^[0-9a-fA-F]*$/.test(cleanHex)) {
+    throw new TypeError(
+      "Invalid hexadecimal string: contains non-hexadecimal characters",
+    );
+  }
+
   // WHY: Pad odd-length hex strings with a leading zero so byte slicing remains aligned.
   const normalizedHex = cleanHex.length % 2 === 1 ? `0${cleanHex}` : cleanHex;
   const bytes = new Uint8Array(normalizedHex.length / 2);
+
   for (let i = 0; i < normalizedHex.length; i += 2) {
     bytes[i / 2] = parseInt(normalizedHex.slice(i, i + 2), 16);
   }
+
   return bytes;
 }
 

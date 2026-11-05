@@ -172,6 +172,12 @@ describe("encoding helper utilities", () => {
     expect(hexToBytes("a")).toEqual(new Uint8Array([10]));
   });
 
+  test("hexToBytes rejects non-hexadecimal characters", () => {
+    expect(() => hexToBytes("zz")).toThrow(TypeError);
+    expect(() => hexToBytes("0x123g")).toThrow(TypeError);
+    expect(() => hexToBytes("not-hex-string")).toThrow(TypeError);
+  });
+
   test("bytesToBase64 and base64ToBytes roundtrip", () => {
     const original = new Uint8Array([72, 101, 108, 108, 111, 33]);
     const b64 = bytesToBase64(original);
@@ -338,5 +344,16 @@ describe("CryptoKey memoization and LRU cache", () => {
 
     await expect(cache.get("bad_key")).rejects.toThrow("invalid key");
     expect(cache.has("bad_key")).toBe(false);
+  });
+
+  test("CryptoKeyLruCache sanitizes NaN, zero, and negative capacity to default bound", () => {
+    const nanCache = new CryptoKeyLruCache(Number.NaN);
+    expect(nanCache.capacity).toBe(256);
+
+    const zeroCache = new CryptoKeyLruCache(0);
+    expect(zeroCache.capacity).toBe(256);
+
+    const negativeCache = new CryptoKeyLruCache(-5);
+    expect(negativeCache.capacity).toBe(256);
   });
 });

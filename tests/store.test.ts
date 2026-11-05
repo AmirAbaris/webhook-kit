@@ -335,6 +335,24 @@ describe("resolveWebhookEventId & checkAndRecordReplay", () => {
       }),
     ).toBeUndefined();
   });
+
+  test("checkAndRecordReplay supports numeric eventId without skipping replay protection", async () => {
+    const store = createInMemoryReplayStore();
+    const first = await checkAndRecordReplay({
+      store,
+      // @ts-expect-error - testing runtime defense against numeric explicit eventId
+      eventId: 820982911946154500,
+    });
+    expect(first).toBeNull();
+    expect(store.has("820982911946154500")).toBe(true);
+
+    const second = await checkAndRecordReplay({
+      store,
+      // @ts-expect-error - duplicate check
+      eventId: 820982911946154500,
+    });
+    expect(second).toBeInstanceOf(ReplayAttackError);
+  });
 });
 
 describe("Replay Store Integration across Providers & Route Handler", () => {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { extractRawBody } from "../src/utils/extract-body.js";
+import { extractHeaderValue } from "../src/utils/headers.js";
 import { PayloadExtractionError, WebhookKitError } from "../src/errors.js";
 import type { RawBody } from "../src/types.js";
 
@@ -226,5 +227,30 @@ describe("extractRawBody", () => {
         );
       }
     }
+  });
+});
+
+describe("extractHeaderValue", () => {
+  test("returns undefined defensively for null, undefined, or non-object headers", () => {
+    expect(extractHeaderValue(null, "x-test")).toBeUndefined();
+    expect(extractHeaderValue(undefined, "x-test")).toBeUndefined();
+    // @ts-expect-error - testing runtime defense against primitive input
+    expect(extractHeaderValue("not-headers", "x-test")).toBeUndefined();
+    // @ts-expect-error - testing runtime defense against numeric input
+    expect(extractHeaderValue(12345, "x-test")).toBeUndefined();
+  });
+
+  test("extracts header values case-insensitively from Headers instance or plain record", () => {
+    const headers = new Headers();
+    headers.set("X-Custom-Header", "custom-value");
+    expect(extractHeaderValue(headers, "x-custom-header")).toBe("custom-value");
+
+    const record = {
+      "X-API-KEY": "secret-key",
+      "content-type": ["text/plain"],
+    };
+    expect(extractHeaderValue(record, "x-api-key")).toBe("secret-key");
+    expect(extractHeaderValue(record, "Content-Type")).toBe("text/plain");
+    expect(extractHeaderValue(record, "non-existent")).toBeUndefined();
   });
 });

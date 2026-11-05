@@ -28,11 +28,11 @@ export function parseShopifySignature(header: string): string {
 
   const trimmed = header.trim();
 
-  // WHY: Validate strict Base64 structure before cryptographic comparison so malformed
-  // or non-Base64 headers fail fast with InvalidSignatureHeaderError.
-  if (!BASE64_REGEX.test(trimmed)) {
+  // WHY: Validate strict 44-character Base64 structure for 32-byte HMAC-SHA256 digests
+  // before cryptographic comparison so malformed or truncated headers fail fast with InvalidSignatureHeaderError.
+  if (trimmed.length !== 44 || !BASE64_REGEX.test(trimmed)) {
     throw new InvalidSignatureHeaderError(
-      "Invalid X-Shopify-Hmac-Sha256 header format: expected Base64-encoded string",
+      "Invalid X-Shopify-Hmac-Sha256 header format: expected 44-character Base64-encoded SHA-256 digest",
     );
   }
 

@@ -174,10 +174,10 @@ function resolveRawTimestamp(
 function parseTimestampValue(rawTimestamp: number | string): number | null {
   const parsed =
     typeof rawTimestamp === "number"
-      ? rawTimestamp
+      ? Math.floor(rawTimestamp)
       : parseInt(String(rawTimestamp).trim(), 10);
 
-  if (!Number.isInteger(parsed) || parsed <= 0) {
+  if (!Number.isFinite(parsed) || parsed <= 0) {
     return null;
   }
 
