@@ -633,10 +633,12 @@ flowchart LR
 
 `webhook-kit` is organized into modular layers:
 
-- **`crypto/`**: Web Cryptography API (`crypto.subtle`) primitives and constant-time buffer comparison.
-- **`utils/`**: Stream and body extraction that preserves raw payload bytes without consuming or mutating input requests.
-- **`providers/`**: Pluggable provider-specific format parsers (Stripe timestamped `t=...,v1=...`, GitHub `sha256=...`, Shopify Base64, etc.).
-- **`errors/`**: Strongly typed error classes (`SignatureVerificationError`, `TimestampToleranceError`, `PayloadExtractionError`).
+- **`crypto/`**: Web Cryptography API (`crypto.subtle`) primitives, key LRU caching, and constant-time buffer comparison (`timingSafeEqual`).
+- **`utils/`**: Stream and header utilities (`extractRawBody`, `extractHeaderValue`) preserving raw bytes without consuming input requests.
+- **`providers/`**: Pluggable provider-specific format parsers and verifiers (Stripe timestamped `t=...,v1=...`, GitHub `sha256=...`, Shopify Base64).
+- **`store/`**: Idempotency and replay attack prevention (`InMemoryReplayStore`, `checkAndRecordReplay`, atomic `setNx`).
+- **`handler/`**: Declarative universal route handler (`createWebhookHandler`) for Next.js, Hono, and WinterCG runtimes.
+- **`errors.ts`**: Strongly typed error class hierarchy (`SignatureVerificationError`, `TimestampToleranceError`, `ReplayAttackError`, `InvalidSignatureHeaderError`, `PayloadExtractionError`).
 
 ---
 
