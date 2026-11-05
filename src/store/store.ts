@@ -569,15 +569,15 @@ async function handleInFlightReplayCheck(
 export async function checkAndRecordReplay(
   options: VerifyReplayStoreOptions,
 ): Promise<ReplayAttackError | null> {
-  const { store, eventId } = options;
+  const { store } = options;
 
-  if (!store || typeof eventId !== "string") {
+  if (!store) {
     return null;
   }
 
-  const trimmedId = eventId.trim();
+  const resolvedId = resolveExplicitEventId(options.eventId);
 
-  if (!trimmedId) {
+  if (!resolvedId) {
     return null;
   }
 
@@ -589,10 +589,10 @@ export async function checkAndRecordReplay(
   // WHY: Prefer atomic set-if-not-exists when provided by the store (e.g. InMemoryReplayStore or Redis SET NX)
   // to eliminate race conditions between checking existence and recording the key.
   if (typeof store.setNx === "function") {
-    const recorded = await store.setNx(trimmedId, ttlSeconds);
+    const recorded = await store.setNx(resolvedId, ttlSeconds);
 
-    return recorded ? null : new ReplayAttackError(trimmedId);
+    return recorded ? null : new ReplayAttackError(resolvedId);
   }
 
-  return handleInFlightReplayCheck(store, trimmedId, ttlSeconds);
+  return handleInFlightReplayCheck(store, resolvedId, ttlSeconds);
 }

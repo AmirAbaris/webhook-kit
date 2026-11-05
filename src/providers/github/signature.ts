@@ -9,6 +9,8 @@ import type { GithubVerifyOptions } from "./types.js";
 
 export const GITHUB_SIGNATURE_PREFIX = "sha256=";
 
+export const GITHUB_SIGNATURE_HEX_REGEX = /^[0-9a-fA-F]{64}$/;
+
 export const GITHUB_EVENT_ID_HEADERS = [
   "x-github-delivery",
   "x-webhook-id",
@@ -36,10 +38,10 @@ export function parseGithubSignature(header: string): string {
 
   const signature = trimmed.slice(GITHUB_SIGNATURE_PREFIX.length).trim();
 
-  // WHY: GitHub HMAC-SHA256 digests require a non-empty hex hash following sha256=
-  if (!signature) {
+  // WHY: GitHub HMAC-SHA256 digests require a strict 64-character hex hash following sha256=
+  if (!signature || !GITHUB_SIGNATURE_HEX_REGEX.test(signature)) {
     throw new InvalidSignatureHeaderError(
-      "Invalid X-Hub-Signature-256 header: missing signature hash after prefix",
+      "Invalid X-Hub-Signature-256 header: missing or malformed 64-character hex signature after prefix",
     );
   }
 

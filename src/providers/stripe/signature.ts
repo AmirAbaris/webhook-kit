@@ -158,6 +158,29 @@ export function parseStripeSignature(
 }
 
 /**
+ * Asserts that a timestamp number is a positive finite number.
+ *
+ * @param val - Candidate timestamp value.
+ * @param name - Descriptive parameter name for error messages.
+ * @param eventTimestamp - Event timestamp for error attribution.
+ * @param tolerance - Tolerance window for error attribution.
+ */
+function assertPositiveFiniteTimestamp(
+  val: number | undefined,
+  name: string,
+  eventTimestamp: number,
+  tolerance: number,
+): void {
+  if (val !== undefined && (!Number.isFinite(val) || val <= 0)) {
+    throw new TimestampToleranceError(
+      eventTimestamp,
+      tolerance,
+      `Invalid ${name}: expected a positive finite number`,
+    );
+  }
+}
+
+/**
  * Validates that a webhook timestamp falls within the allowed tolerance window.
  *
  * @param timestamp - Unix timestamp in seconds from the signature header.
@@ -170,15 +193,36 @@ export function validateTimestampTolerance(
   toleranceSeconds = 300,
   currentTimestamp?: number,
 ): void {
+  // WHY: Guard against NaN or non-finite tolerance options to prevent silent validation bypass.
+  if (!Number.isFinite(toleranceSeconds)) {
+    throw new TimestampToleranceError(
+      timestamp,
+      0,
+      "Invalid timestamp tolerance value: expected a finite number",
+    );
+  }
+
   // WHY: Setting tolerance <= 0 explicitly disables replay protection.
   if (toleranceSeconds <= 0) {
     return;
   }
 
-  const now = currentTimestamp ?? Math.floor(Date.now() / 1000);
-  const diff = Math.abs(now - timestamp);
+  assertPositiveFiniteTimestamp(
+    timestamp,
+    "webhook timestamp",
+    timestamp,
+    toleranceSeconds,
+  );
+  assertPositiveFiniteTimestamp(
+    currentTimestamp,
+    "current timestamp",
+    timestamp,
+    toleranceSeconds,
+  );
 
-  if (diff > toleranceSeconds) {
+  const now = currentTimestamp ?? Math.floor(Date.now() / 1000);
+
+  if (Math.abs(now - timestamp) > toleranceSeconds) {
     throw new TimestampToleranceError(timestamp, toleranceSeconds);
   }
 }
@@ -288,10 +332,12 @@ export function matchesAnyStripeSignature(
   candidates: string[],
 ): boolean {
   let matched = false;
+  const expectedLower = expectedSignature.trim().toLowerCase();
 
   for (const candidate of candidates) {
-    // WHY: Use timingSafeEqual on each candidate to protect against side-channel timing leaks.
-    if (timingSafeEqual(expectedSignature, candidate)) {
+    // WHY: Lowercase and trim candidate signatures before constant-time comparison
+    // to prevent hex casing variations from producing false rejections while defending against timing leaks.
+    if (timingSafeEqual(expectedLower, candidate.trim().toLowerCase())) {
       matched = true;
     }
   }

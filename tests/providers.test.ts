@@ -180,6 +180,22 @@ describe("Stripe Provider", () => {
 
     expect(rolledResult.valid).toBe(true);
 
+    // 5.1. Verify uppercase hex in v1 signature tag matches without false rejection
+    const rawHexSig = await computeSubtleHmac(
+      "SHA-256",
+      secret,
+      `${now}.${rawPayload}`,
+      "hex",
+    );
+    const upperStripeHeader = `t=${now},v1=${rawHexSig.toUpperCase()}`;
+    const upperStripeResult = await verifyStripeWebhook({
+      body: rawPayload,
+      signature: upperStripeHeader,
+      secret,
+    });
+
+    expect(upperStripeResult.valid).toBe(true);
+
     // 6. Verify assertStripeWebhook returns parsed payload directly
     const assertedPayload = await assertStripeWebhook({
       body: rawPayload,
@@ -316,6 +332,20 @@ describe("Stripe Provider", () => {
     expect(() =>
       validateTimestampTolerance(fixedNow - 300, 300, fixedNow),
     ).not.toThrow();
+
+    // 8. Rejects NaN, non-finite, and negative values to prevent validation bypass
+    expect(() =>
+      validateTimestampTolerance(fixedNow, Number.NaN, fixedNow),
+    ).toThrow(TimestampToleranceError);
+    expect(() => validateTimestampTolerance(Number.NaN, 300, fixedNow)).toThrow(
+      TimestampToleranceError,
+    );
+    expect(() => validateTimestampTolerance(-10, 300, fixedNow)).toThrow(
+      TimestampToleranceError,
+    );
+    expect(() => validateTimestampTolerance(fixedNow, 300, Number.NaN)).toThrow(
+      TimestampToleranceError,
+    );
   });
 
   test("should reject tampered Stripe webhook payloads and invalid secrets", async () => {
@@ -465,6 +495,19 @@ describe("GitHub Provider", () => {
     expect(() => parseGithubSignature("sha256=   ")).toThrow(
       InvalidSignatureHeaderError,
     );
+
+    // 7. Rejects malformed, non-64-character, or non-hex signatures
+    expect(() => parseGithubSignature("sha256=123")).toThrow(
+      InvalidSignatureHeaderError,
+    );
+    expect(() =>
+      parseGithubSignature("sha256=not_a_valid_hex_hash_value"),
+    ).toThrow(InvalidSignatureHeaderError);
+    expect(() =>
+      parseGithubSignature(
+        "sha256=d57c68d10b284e3d9e87179221a4c3f854e999760b92357771749219b1618e5z",
+      ),
+    ).toThrow(InvalidSignatureHeaderError);
   });
 
   test("should verify valid GitHub webhook HMAC-SHA256", async () => {
@@ -731,6 +774,14 @@ describe("Shopify Provider", () => {
     expect(() => parseShopifySignature("abc")).toThrow(
       InvalidSignatureHeaderError,
     );
+
+    // 5. Rejects non-44-character or truncated Base64 strings (e.g. 4-char valid Base64)
+    expect(() => parseShopifySignature("AAAA")).toThrow(
+      InvalidSignatureHeaderError,
+    );
+    expect(() =>
+      parseShopifySignature("1Xxo0QsoTj2ehxeSIaTD+FTpmXYLkjV3cXSSGbFhbls=="),
+    ).toThrow(InvalidSignatureHeaderError);
   });
 
   test("should verify valid Shopify webhook HMAC", async () => {

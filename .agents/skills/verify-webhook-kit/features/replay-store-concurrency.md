@@ -4,7 +4,8 @@
 - Concurrency deduplication (prevents TOCTOU double-execution on simultaneous delivery of identical event IDs).
 - Hardware-level atomic `setNx` on `InMemoryReplayStore` and in-flight promise synchronization for async stores.
 - Capacity bounding and fast-path head eviction preventing $O(N)$ event loop freezes under sustained high volume.
-- Defensive handling of non-string event IDs, negative TTLs, and `NaN` capacity options.
+- Defensive support for numeric event IDs (e.g. Shopify numeric webhook IDs) and non-string types, normalized seamlessly without skipping idempotency checks.
+- Strict rejection of non-finite (`NaN`, `Infinity`) or non-positive timestamps and tolerance options.
 - Standard webhook header recognition (`svix-id`, `webhook-id`, `x-github-delivery`, `x-shopify-webhook-id`, `x-webhook-id`).
 
 ## How to get to it (user POV)

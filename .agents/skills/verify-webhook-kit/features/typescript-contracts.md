@@ -3,7 +3,7 @@
 ## Sub-features
 - Generic type parameter propagation (`verifyWebhookSignature<T>` returns `WebhookVerificationResult<T>`).
 - Direct payload unwrapping (`assertWebhookSignature<T>` returns `T`).
-- Standardized custom error hierarchy (`WebhookKitError`, `SignatureVerificationError`, `TimestampToleranceError`, `PayloadExtractionError`).
+- Standardized custom error hierarchy (`WebhookKitError`, `SignatureVerificationError`, `TimestampToleranceError`, `ReplayAttackError`, `InvalidSignatureHeaderError`, `PayloadExtractionError`).
 
 ## How to get to it (user POV)
 A developer provides their custom event payload interface to `verifyWebhookSignature<MyEvent>()` and receives full autocompletion and type-safety on `result.payload`.

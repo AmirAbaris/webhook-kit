@@ -53,7 +53,7 @@ pnpm test:smoke
 - Sandbox cleanly removed.
 
 ### B. Unit & Provider Specification Tests
-Run the test runner to verify behavior specifications:
+Run the test runner to verify behavior specifications, input hardening (strict 64-char hex / 44-char base64 digest formats, non-finite timestamp rejection), and numeric event ID replay handling:
 
 ```bash
 pnpm test

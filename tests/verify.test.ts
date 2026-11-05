@@ -180,6 +180,25 @@ describe("verifyWebhookSignature", () => {
 
     expect(expiredResult.valid).toBe(false);
     expect(expiredResult.error).toBeInstanceOf(TimestampToleranceError);
+
+    // Handles floating point timestamps gracefully with Math.floor
+    const floatTs = now - 50.789;
+    const floatSig = await computeSubtleHmac(
+      "SHA-256",
+      TEST_SECRET,
+      `${Math.floor(floatTs)}.${RAW_JSON_BODY}`,
+      "hex",
+    );
+    const floatResult = await verifyWebhookSignature({
+      body: RAW_JSON_BODY,
+      signature: floatSig,
+      secret: TEST_SECRET,
+      timestamp: floatTs,
+      toleranceSeconds: 300,
+      currentTimestamp: now,
+    });
+    expect(floatResult.valid).toBe(true);
+    expect(floatResult.timestamp).toBe(Math.floor(floatTs));
   });
 
   test("should safely parse JSON payload when signature is valid", async () => {
